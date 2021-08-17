@@ -65,14 +65,6 @@
 (module+ test
   ;; This sort of thing fails at the moment
   ;;  (due to the renaming) - can I use the original names somehow? Context wrong at the moment.
-  (check-not-exn
-   (λ ()
-     (convert-compile-time-error
-      (let ((y 1))
-        (D+ (lambda (x)
-              (let ((result (+ x y)))
-                result)))))))
-
   (test-case "plus"
     (check-not-exn
      (λ ()
@@ -84,6 +76,15 @@
        (convert-compile-time-error
         (D+ (λ (x) (let ([f +])
                      (f x x))))))))
+
+  (test-case "closure"
+    (check-not-exn
+     (λ ()
+       (convert-compile-time-error
+        (let ((y 1))
+          (D+ (lambda (x)
+                (let ((result (+ x y)))
+                  result))))))))
   
   (test-case "identity"
    (match-let* ([Df (D+ (λ (a)
@@ -103,7 +104,24 @@
       (check-equal? primal1 0.0)
       (check-equal? primal2 15.0)
       (check-equal? (backprop1 1.0) '(() 0.0))
-      (check-equal? (backprop2 1.0) '(() 1.0))))           
+      (check-equal? (backprop2 1.0) '(() 1.0))))
+
+  ;; doesn't work because no letrec-values
+  ;; (test-case "pow"
+  ;;   (D+ (λ (x n)
+  ;;         (define (pow x n) (if (= n 0) 1.0 (* x (pow x (- n 1)))))
+  ;;         (pow x n))))
+
+  (test-case "Y-pow"
+    (define D+pow
+      (D+ (λ (x n)
+            (let ([pow* (λ (x n rec)
+                          (if (= n 0) 1.0 (* x (rec x (- n 1) rec))))])
+              (let ([pow (λ (x n) (pow* x n pow*))])
+                (pow x n))))))
+    (check-equal? ((cadr (D+pow 2.0 3.0)) 1.0)
+                  '(() 12.0 0.0)))
+  
 )
 
 
