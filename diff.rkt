@@ -26,12 +26,17 @@
 
 (define-for-syntax (prim-definition prim)
   (syntax-parse prim
-    #:literals (+)
+    #:literals (+ *)
     [+
      #'(λ xs
          (list (apply + xs)
                (λ (Aw) (cons '() (make-list (length xs) Aw)))))]
 
+    [*
+     #'(λ (x y)
+         (list (* x y)
+               (λ (Aw) (list '() (* Aw y) (* Aw x)))))]
+    
     [other #'(if (procedure? other)
                  (λ xs (list (apply other xs)
                              (λ (Aw)
