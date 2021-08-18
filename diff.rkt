@@ -89,6 +89,13 @@
                                                  "op" 'other)))))
                  other)]))
 
+(define-syntax-rule (primal De)
+  (let-values ([(p b) De]) p))
+
+(define-syntax-rule (backprop De)
+  (let-values ([(p b) De]) b))
+
+
 (define-syntax (D+ stx)
   (syntax-parse stx
     #:literal-sets (kernel-literals)
@@ -102,7 +109,15 @@
      #:with (De* (prim:id prim-intro:id) ...) (reverse-transform #'e*)
      #:with (prim-def ...) (stx-map prim-definition #'(prim ...))
      #'(let* ([prim-intro prim-def] ...)
-         De*)]))
+         (let ([D+f De*])
+           (λ xs
+             (let ([primal+backprop (apply D+f xs)])
+               (values (car primal+backprop)
+                       (λ Aw
+                         (coerce-zero
+                          ;; drop terms from closed-over variables
+                          (cdr (apply (cadr primal+backprop) Aw))
+                          xs)))))))]))
 
 (module+ test
   (test-case "plus"
@@ -127,34 +142,34 @@
                   result))))))))
 
   (test-case "identity"
-   (match-let* ([Df (D+ (λ (a)
-                          (((λ (b)
-                              (λ (c)
-                                b)) a) 1)))]
-                [v 184.0]
-                [(list primal backprop) (Df v)])
-
-     (check-equal? primal 184.0)
-     (check-equal? (backprop 1.0) '(() 1.0))))
+    (let*-values ([(D+f) (D+ (λ (a)
+                               (((λ (b)
+                                   (λ (c)
+                                     b)) a) 1)))]
+                  [(y <-y) (D+f 184.0)])
+     (check-equal? y 184.0)
+     (check-equal? (<-y 1.0) '(1.0))))
 
   (test-case "conditional"
-    (match-let* ([Df (D+ (λ (a) (if (> a 10) a 0.0)))]
-                 [(list primal1 backprop1) (Df 5.0)]
-                 [(list primal2 backprop2) (Df 15.0)])
+    (let*-values ([(D+f) (D+ (λ (a) (if (> a 10) a 0.0)))]
+                  [(primal1 backprop1) (D+f 5.0)]
+                  [(primal2 backprop2) (D+f 15.0)])
       (check-equal? primal1 0.0)
       (check-equal? primal2 15.0)
-      (check-equal? (backprop1 1.0) '(() 0.0))
-      (check-equal? (backprop2 1.0) '(() 1.0))))
+      (check-equal? (backprop1 1.0) '(0.0))
+      (check-equal? (backprop2 1.0) '(1.0))))
 
-  (test-case "Y-pow"
+  (test-case "pow (Y)"
     (define D+pow
       (D+ (λ (x n)
-            (let ([pow* (λ (x n rec)
-                          (if (= n 0) 1.0 (* x (rec x (- n 1) rec))))])
-              (let ([pow (λ (x n) (pow* x n pow*))])
-                (pow x n))))))
-    (check-equal? ((cadr (D+pow 2.0 3.0)) 1.0)
-                  '(() 12.0 0.0)))
+            (let* ([pow* (λ (x n rec)
+                           (if (= n 0)
+                               1.0
+                               (* x (rec x (- n 1) rec))))]
+                   [pow (λ (x n) (pow* x n pow*))])
+              (pow x n)))))
+    (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
+                  '(12.0 0.0)))
 
   (test-case "pow"
     (define D+pow
@@ -162,29 +177,28 @@
             (define (pow x n) (if (= n 0) 1.0 (* x (pow x (- n 1)))))
             (pow x n))))
 
-    (check-equal? ((cadr (D+pow 2.0 3.0)) 1.0)
-                  '(() 12.0 0.0)))
+    (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
+                  '(12.0 0.0)))
 
   (test-case "Different final use"
     (check-equal?
-     ((cadr ((D+ (λ (x) (let ([b 1]) x))) 2)) 1)
-     '(() 1))
+     ((backprop ((D+ (λ (x) (let ([b 1]) x))) 2)) 1)
+     '(1))
 
-    ;; gen-zero in closure position at the moment
-    (let ([Df (let ([a 1]) (D+ (λ (x) (let ([b a]) x))))])
+    (let ([D+f (let ([a 1]) (D+ (λ (x) (let ([b a]) x))))])
       (check-equal?
-       ((cadr (Df 2)) 1)
-       '((0) 1))))
+       ((backprop (D+f 2)) 1)
+       '(1))))
 
   (test-case "list/cons/car/cdr"
     (check-equal?
-     ((cadr ((D+ (λ (x y) (list (car x) (cdr x) y x y)))
+     ((backprop ((D+ (λ (x y) (list (car x) (cdr x) y x y)))
              '(1 2) 3))
       '(1 1 0 (0 . 0) 0))
-     '(() (1 . 1) 0)))
+     '((1 . 1) 0)))
 
-
-)
+  ;;
+  )
 
 
 ;; TODO
@@ -202,6 +216,10 @@
 
 ;; think about other lambda formals
 
+;; example with repeated use of D+
+
+;; trick for defining additional primitives
+
 ;; cosmetics for D+:
 ;;   - coerce gen-zero
 ;;   - drop closure variables
@@ -210,3 +228,7 @@
 ;; multiple values:
 ;;   - support in let-bindings and return from functions
 ;;   - use to return closure variables to avoid destructuring operations
+
+;; set! (and functions that mutate)
+
+;; quote-syntax
