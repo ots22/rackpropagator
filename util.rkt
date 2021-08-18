@@ -13,7 +13,7 @@
          pattern-lambda
          pat-λ
          syntax-class->predicate
-         destructuring-sum-let*)
+         destructuring-sum-letrec)
 
 (module+ test (require rackunit))
 
@@ -41,11 +41,11 @@
     [(~var _ stx-class) #t]
     [_ #f]))
 
-;; Like let*, but repeated identifiers in the binding forms are
+;; Like letrec, but repeated identifiers in the binding forms are
 ;; accumulated using the generic 'add'.  An identifier can be used in
 ;; subsequent value expressions, once the definition is complete
 ;; (after all of a particular identifier have appeared).
-(define-syntax (sum-let* stx)
+(define-syntax (sum-letrec stx)
   (syntax-parse stx
     [(_ ([x:id v:expr] ...) body ...+)
      #:with grouped-pairs (group-by stx-car
@@ -57,7 +57,7 @@
                                 (foldl (λ (a b) #`(add #,a #,b))
                                        (stx-car grp) (cdr (syntax-e grp))))
                               #'v*-cmpts)
-     #'(let* ([x* v*] ...) body ...)]))
+     #'(letrec ([x* v*] ...) body ...)]))
 
 ;; Example:
 ;;   #'((a b) e)
@@ -76,21 +76,21 @@
               (explode-binding #'(xs (cdr tmp)))))]))
 
 ;; Similar to match-let with a nested list pattern, but using sum-let
-(define-syntax (destructuring-sum-let* stx)
+(define-syntax (destructuring-sum-letrec stx)
   (syntax-parse stx
     [(_ (binding ...) body ...+)
      #:with (binding* ...) (apply append (stx-map explode-binding #'(binding ...)))
-     #'(sum-let* (binding* ...) body ...)]))
+     #'(sum-letrec (binding* ...) body ...)]))
 
 (module+ test
   (check-equal?
-   (sum-let* ([a 1]
-              [b 2]
-              [c 3]
-              [a b]
-              [c b]
-              [a c])
-            (list a b c))
+   (sum-letrec ([a 1]
+                [b 2]
+                [c 3]
+                [a b]
+                [c b]
+                [a c])
+     (list a b c))
 
    (let* ([a 1]
           [b 2]
@@ -101,23 +101,23 @@
      (list a b c)))
 
   (check-exn
-   exn:fail:syntax?
+   exn:fail:contract:variable?
    (λ ()
      (convert-compile-time-error
-      (sum-let* ([a 1]
-                 ;; can't refer to 'a' here, since its definition is not
-                 ;; complete
-                 [b a]
-                 [a 2])
-                (list a b)))))
+      (sum-letrec ([a 1]
+                   ;; can't refer to 'a' here, since its definition is not
+                   ;; complete
+                   [b a]
+                   [a 2])
+        (list a b)))))
 
   (check-equal?
-   (destructuring-sum-let* ([(x x) '(1 1)]) x)
+   (destructuring-sum-letrec ([(x x) '(1 1)]) x)
    2)
   
   (check-equal?
-   (destructuring-sum-let* ([(a b c) '(1 2 3)]
-                            [(d e . e) '(100 500 . 500)]
-                            [((a b) c ()) (list (list d d) e)])
-                           (list a b c))
+   (destructuring-sum-letrec ([(a b c) '(1 2 3)]
+                              [(d e . e) '(100 500 . 500)]
+                              [((a b) c ()) (list (list d d) e)])
+     (list a b c))
    '(101 102 1003)))

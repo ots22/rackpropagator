@@ -24,8 +24,12 @@
 ;; combining-letrec is a placeholder identifier for the output of
 ;; anf1/anf2, and should not appear in the final transformed output,
 ;; of anf3
-(define-syntax (combining-letrec stx)
-  (raise-syntax-error #f "invalid syntax" stx))
+(module combining-letrec-mod racket
+  (provide combining-letrec)
+  (define-syntax (combining-letrec stx)
+    (raise-syntax-error #f "invalid syntax" stx)))
+
+(require (for-template 'combining-letrec-mod))
 
 ;; ----------------------------------------
 ;; Conventions and syntax classes
@@ -333,7 +337,6 @@
 ;; ----------------------------------------
 
 (module+ test
-      (require racket/pretty)
   (define-namespace-anchor ns-anchor)
   (define ns (namespace-anchor->namespace ns-anchor))
   (parameterize ([current-namespace ns])
@@ -390,9 +393,7 @@
       (define fib-stx-anf3 (anf3-normalize fib-stx))
 
       (check-true (anf3? fib-stx-anf3))
-      (check-equal? 10946 (eval-syntax fib-stx-anf3))
-    (pretty-print (syntax->datum fib-stx-anf3))
-      )
+      (check-equal? 10946 (eval-syntax fib-stx-anf3)))
     
     (test-case "anf let/let*/letrec"
       (check-equal?

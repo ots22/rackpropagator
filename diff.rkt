@@ -18,7 +18,8 @@
                      "closure.rkt"
                      "primitives.rkt")
          "util.rkt"
-         "primitives.rkt")
+         "primitives.rkt"
+         "anf.rkt")
 
 (module+ test
   (require rackunit
@@ -55,7 +56,7 @@
      ;;; with expanded programs, but also introduce identifiers, which
      ;;; might not be picked up by free-vars unless we expand again.
      #:do [(define simplified-e
-             (simple-anf-normalize (local-expand #'e 'expression '())))]
+             (anf-normalize (local-expand #'e 'expression '())))]
      #:with (_ (((_) e*)) _) (local-expand simplified-e 'expression '())
      #:with (De* (prim:id prim-intro:id) ...) (reverse-transform #'e*)
      #:with (prim-def ...) (stx-map prim-definition #'(prim ...))
@@ -106,11 +107,10 @@
       (check-equal? (backprop1 1.0) '(() 0.0))
       (check-equal? (backprop2 1.0) '(() 1.0))))
 
-  ;; doesn't work because no letrec-values
-  ;; (test-case "pow"
-  ;;   (D+ (λ (x n)
-  ;;         (define (pow x n) (if (= n 0) 1.0 (* x (pow x (- n 1)))))
-  ;;         (pow x n))))
+  (test-case "pow"
+    (D+ (λ (x n)
+          (define (pow x n) (if (= n 0) 1.0 (* x (pow x (- n 1)))))
+          (pow x n))))
 
   (test-case "Y-pow"
     (define D+pow
