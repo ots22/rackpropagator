@@ -4,7 +4,8 @@
                      racket/list
                      racket/syntax
                      syntax/parse
-                     syntax/stx)
+                     syntax/stx
+                     "primitives.rkt")
          syntax/macro-testing
          syntax/parse
          "primitives.rkt")
@@ -13,7 +14,8 @@
          pattern-lambda
          pat-λ
          syntax-class->predicate
-         destructuring-sum-letrec)
+         destructuring-sum-letrec
+         destructuring-sum-lazy-letrec)
 
 (module+ test (require rackunit))
 
@@ -55,7 +57,7 @@
      #:with v*-cmpts (reverse (stx-map (λ (grp) (stx-map stx-cadr grp)) #'grouped-pairs))
      #:with (v* ...) (stx-map (λ (grp)
                                 (foldl (λ (a b) #`(add #,a #,b))
-                                       (stx-car grp) (cdr (syntax-e grp))))
+                                       (stx-car grp) (zero-cdr (syntax-e grp))))
                               #'v*-cmpts)
      #'(letrec ([x* v*] ...) body ...)]))
 
@@ -72,8 +74,8 @@
      #:with tmp (generate-temporary)
      (cons
       #'(tmp e)
-      (append (explode-binding #'(x (car tmp)))
-              (explode-binding #'(xs (cdr tmp)))))]))
+      (append (explode-binding #'(x (zero-car tmp)))
+              (explode-binding #'(xs (zero-cdr tmp)))))]))
 
 ;; Similar to match-let with a nested list pattern, but using sum-let
 (define-syntax (destructuring-sum-letrec stx)
@@ -81,6 +83,50 @@
     [(_ (binding ...) body ...+)
      #:with (binding* ...) (apply append (stx-map explode-binding #'(binding ...)))
      #'(sum-letrec (binding* ...) body ...)]))
+
+
+;; ----------------------------------------
+;; lazy
+
+(define-syntax (sum-lazy-letrec stx)
+  (syntax-parse stx
+    [(_ ([x:id v:expr] ...) body ...+)
+     #:with grouped-pairs (group-by stx-car
+                                    (reverse (syntax-e #'([x v] ...)))
+                                    free-identifier=?)
+     #:with (x* ...) (reverse (stx-map stx-caar #'grouped-pairs))
+     #:with v*-cmpts (reverse (stx-map (λ (grp) (stx-map stx-cadr grp)) #'grouped-pairs))
+     #:with (v* ...) (stx-map (λ (grp)
+                                (foldl (λ (a b) #`(add #,a #,b))
+                                       (stx-car grp) (zero-cdr (syntax-e grp))))
+                              #'v*-cmpts)
+     #'(letrec ([x* (λ () v*)] ...) body ...)]))
+
+;; Example:
+;;   #'((a b) e)
+;;      => (list #'(tmp1 e) #'(a (car tmp)) #'(tmp2 (cdr tmp)) #'(b (car tmp2)))
+;;
+;; explode-binding : syntax? -> (listof syntax?)
+(define-for-syntax (explode-binding-lazily b)
+  (syntax-parse b
+    [(() _) null]
+    [(x:id e) (list b)]
+    [((x . xs) e)
+     #:with tmp (generate-temporary)
+     (cons
+      #'(tmp e)
+      (append (explode-binding-lazily #'(x (zero-car (tmp))))
+              (explode-binding-lazily #'(xs (zero-cdr (tmp))))))]))
+
+;; Similar to match-let with a nested list pattern, but using sum-let
+(define-syntax (destructuring-sum-lazy-letrec stx)
+  (syntax-parse stx
+    [(_ (binding ...) body ...+)
+     #:with (binding* ...) (apply append (stx-map explode-binding-lazily #'(binding ...)))
+     #'(sum-lazy-letrec (binding* ...) body ...)]))
+
+
+;; ----------------------------------------
 
 (module+ test
   (check-equal?

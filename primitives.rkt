@@ -4,9 +4,12 @@
 ;; Primitives available to user code: generic zero and addition
 ;;
 
-(require "closure.rkt")
+; (require "closure.rkt")
 
-(provide zero
+(provide gen-zero
+         gen-zero?
+         zero-car
+         zero-cdr
          add)
 
 ;; TODO
@@ -15,19 +18,35 @@
 ;;
 ;; 'add' and a zero can be done efficiently
 
-(define (zero a)
-  (cond
-    [(null? a) null]
-    [(pair? a) (cons (zero (car a)) (zero (cdr a)))]
-    [(closure? a) (closure-zero a)]
-    [(procedure? a) null]
-    [else 0.0]))
+;; (define (zero a)
+;;   (cond
+;;     [(null? a) null]
+;;     [(pair? a) (cons (zero (car a)) (zero (cdr a)))]
+;;     [(closure? a) ((closure-zero a))]
+;;     [(procedure? a) null]
+;;     [else 0.0]))
 
-(define (zero? a)
-  (equal? a (zero a)))
+(struct gen-zero ())
+
+;; TODO coerce-zero
+
+(define (zero-car a)
+  (if (gen-zero? a)
+      a
+      (car a)))
+
+(define (zero-cdr a)
+  (if (gen-zero? a)
+      a
+      (cdr a)))
+
+;; (define (zero? a)
+;;   (equal? a (zero a)))
 
 (define (add a b)
   (cond
+    [(gen-zero? a) b]
+    [(gen-zero? b) a]
     [(and (null? a) (null? b)) null]
     [(pair? a) (cons (add (car a) (car b))
                      (add (cdr a) (cdr b)))]
