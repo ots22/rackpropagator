@@ -15,7 +15,6 @@
                      syntax/strip-context
                      "anf.rkt"
                      "util.rkt"
-                     "closure.rkt"
                      "primitives.rkt")
          "util.rkt"
          "primitives.rkt"
