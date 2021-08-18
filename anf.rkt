@@ -18,7 +18,6 @@
 (module+ test
   (require rackunit))
 
-
 ;; ----------------------------------------
 
 ;; combining-letrec is a placeholder identifier for the output of
@@ -48,7 +47,8 @@
 
 (define-syntax-class anf-const
   (pattern a:boolean)
-  (pattern a:number))
+  (pattern a:number)
+  (pattern ()))
 
 (define-conventions anf1+2-convention
   [#rx"^x" id]

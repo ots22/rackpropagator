@@ -1,10 +1,10 @@
 #lang racket/base
 
 (require (for-template racket/base
-                       "util.rkt"
-                       "primitives.rkt"
-                       ;; "closure.rkt"
-                       )
+                       (only-in "util.rkt"
+                                destructuring-sum-letrec
+                                destructuring-sum-lazy-letrec)
+                       "primitives.rkt")
          racket/list
          racket/dict
          racket/function
@@ -15,10 +15,7 @@
          syntax/id-table
          syntax/id-set
          syntax/free-vars
-         "anf.rkt"
-         "util.rkt"
-         ;; "closure.rkt"
-         "primitives.rkt")
+         "anf.rkt")
 
 (provide reverse-transform)
 
@@ -41,6 +38,26 @@
            #:attr backprop (backpropagator #'x)
            #:attr intro (introduction #'x)
            #:attr tagged (tagged #'x)))
+
+
+;; the sensitivities are thunks (defined with destructuring-sum-lazy-letrec)
+;; sensitivity-result produces a result of the appropriate shape, forcing each thunk
+(define-syntax-class lambda-formals/backprop-ids
+  (pattern (x:id/backprop-ids ...)
+           #:attr (vars 1) (syntax->list #'(x ...))
+           #:attr (sensitivity-vars 1) (syntax->list #'(x.sensitivity ...))
+           #:attr (sensitivity-result 1) (syntax->list #'((x.sensitivity) ... null))
+           #:attr tagged #'(x.tagged ...))
+  (pattern xs:id/backprop-ids
+           #:attr (vars 1) (syntax->list #'(xs))
+           #:attr (sensitivity-vars 1) (syntax->list #'(xs.sensitivity))
+           #:attr (sensitivity-result 1) (syntax->list #'((xs.sensitivity)))
+           #:attr tagged #'xs.tagged)
+  (pattern (x:id/backprop-ids ...+ . xs:id/backprop-ids)
+           #:attr (vars 1) (syntax->list #'(x ... xs))
+           #:attr (sensitivity-vars 1) (syntax->list #'(x.sensitivity ... xs.sensitivity))
+           #:attr (sensitivity-result 1) (syntax->list #'((x.sensitivity) ... (xs.sensitivity)))
+           #:attr tagged #'(x.tagged ... . xs.tagged)))
 
 ;; Note: takes a 'let-values' style binding, and produces a binding
 ;; form for sum-destructuring-letrec (sheds one level of parens around
@@ -65,11 +82,7 @@
      #:with (x-free ...) (free-vars #'(#%plain-lambda formals M))
      #:with (transformed-expr (prim _) ...)
             (reverse-transform #'(#%plain-lambda formals M) bound-ids)
-     (cons #'(lhs.tagged ;;(make-closure
-                          transformed-expr
-                          ;;(λ () (list (zero x-free.tagged) ...))
-                          ;;)
-                          )
+     (cons #'(lhs.tagged transformed-expr)
            (syntax-e #'(prim ...)))]
 
     ;; If any of x0 xs ... are not in the list of bound ids, add to the list of ids
@@ -147,14 +160,13 @@
                        tmp))
      (reverse-transform #'lam* bound-ids)]
 
-    [{~and lam (#%plain-lambda (x0 ...)
+    [{~and lam (#%plain-lambda formals:lambda-formals/backprop-ids
                  (letrec-values {~and (((x) B) ... ((xn) Bn))
                                       orig-bindings}
                    xn*))}
      #:when (free-identifier=? #'xn #'xn*)
-     ;;#:with {~and orig-bindings (((x) e) ... ((xn) en))} (collect-bindings #'M)
      #:do [(define bound-ids* (append bound-ids
-                                      (syntax->list #'(x0 ...))
+                                      (syntax->list #'(formals.vars ...))
                                       (syntax->list #'(x ... xn))))]
      ;; Note: free-vars returns only let/lambda bindings These will be
      ;; a subset of bound-ids* (bound-ids, in fact) that are used in
@@ -164,20 +176,23 @@
             (stx-map (curryr ϕ bound-ids*) #'orig-bindings)
      #:with (backprop-bindings ...) (map ρ (reverse (syntax-e #'orig-bindings)))
      (cons
-      #'(λ (x0.tagged ...)
+      #'(λ formals.tagged
           (destructuring-sum-letrec (primal-bindings ...)
             (list
              xn.tagged
              (λ (xn-sensitivity)
-               (destructuring-sum-lazy-letrec ([xn.sensitivity xn-sensitivity]
-                                               [x-free.sensitivity (gen-zero)] ...
-                                               [x0.sensitivity (gen-zero)] ...
-                                               [x.sensitivity (gen-zero)] ...
-                                               backprop-bindings ...)
-                  (list (list (x-free.sensitivity) ...) (x0.sensitivity) ...))))))
+               (destructuring-sum-lazy-letrec
+                   ([xn.sensitivity xn-sensitivity]
+                    [x-free.sensitivity (gen-zero)] ...
+                    [formals.sensitivity-vars (gen-zero)] ...
+                    [x.sensitivity (gen-zero)] ...
+                    backprop-bindings ...)
+                 (list* (list (x-free.sensitivity) ...)
+                        formals.sensitivity-result ...))))))
       (syntax-e #'((prim prim.tagged) ... ...)))]
     ;;
     ))
+
 
 (module+ test
   (check-not-exn

@@ -27,6 +27,8 @@
 ;; conforming shape to b
 ;; 
 ;; coerce-zero : pair? pair? -> pair?
+
+;; TODO better error message for non-conforming a and b
 (define (coerce-zero a b)
   (cond
     [(gen-zero? a) (zero b)]

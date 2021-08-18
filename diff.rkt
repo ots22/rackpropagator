@@ -196,6 +196,16 @@
       '(1 1 0 (0 . 0) 0))
      '((1 . 1) 0)))
 
+  (test-case "lambda formals"
+    (check-equal?
+     ((backprop ((D+ (λ xs (car xs))) 2.0 3.0)) 1.0)
+     '(1.0 0.0))
+
+    (check-equal?
+     ((backprop ((D+ (λ (x . xs) (car xs))) 2.0 3.0 4.0)) 1.0)
+     '(0.0 1.0 0.0))
+    )
+
   ;;
   )
 
@@ -210,8 +220,6 @@
 ;; error messages (macros/syntax)
 
 ;; more backpropagators
-
-;; think about other lambda formals
 
 ;; example with repeated use of D+ (depends on fixing lambda formals)
 
