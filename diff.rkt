@@ -95,7 +95,6 @@
 (define-syntax-rule (backprop De)
   (let-values ([(p b) De]) b))
 
-
 (define-syntax (D+ stx)
   (syntax-parse stx
     #:literal-sets (kernel-literals)
@@ -212,13 +211,15 @@
 
 ;; more backpropagators
 
-;; examples involving lists (passed as arguments, returned)
-
 ;; think about other lambda formals
 
-;; example with repeated use of D+
+;; example with repeated use of D+ (depends on fixing lambda formals)
 
-;; trick for defining additional primitives
+;; trick for defining additional primitives nicely/extensibly
+;; perhaps both:
+;;   - register-backprop
+;;   - define/backprop (use reverse-transform/backprop,
+;;     then 'register' using the trick)
 
 ;; cosmetics for D+:
 ;;   - coerce gen-zero
