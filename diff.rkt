@@ -1,24 +1,20 @@
-#lang racket
+#lang racket/base
 
-(require (for-syntax racket/dict
-                     syntax/id-table
-                     syntax/parse
-                     "reverse-transform.rkt"
+(require (for-syntax racket/base
                      racket/list
-                     racket/dict
                      racket/function
                      racket/syntax
                      syntax/parse
                      syntax/stx
                      syntax/id-table
                      syntax/free-vars
-                     syntax/strip-context
                      "anf.rkt"
-                     "util.rkt"
-                     "primitives.rkt")
-         "util.rkt"
-         "primitives.rkt"
-         "anf.rkt")
+                     "reverse-transform.rkt"
+                     "primitives.rkt"
+                     "util.rkt")
+         racket/list
+         racket/function
+         "primitives.rkt")
 
 (module+ test
   (require rackunit
