@@ -28,7 +28,8 @@
   (define-syntax (combining-letrec stx)
     (raise-syntax-error #f "invalid syntax" stx)))
 
-(require (for-template 'combining-letrec-mod))
+(require (for-template 'combining-letrec-mod)
+         'combining-letrec-mod)
 
 ;; ----------------------------------------
 ;; Conventions and syntax classes
