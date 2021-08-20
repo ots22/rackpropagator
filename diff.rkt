@@ -14,6 +14,7 @@
                      "util.rkt")
          racket/list
          racket/function
+         racket/unsafe/ops
          "primitives.rkt")
 
 (module+ test
@@ -32,12 +33,12 @@
     [*
      #'(λ (x y)
          (list (* x y)
-               (λ (Aw) (list '() (* Aw y) (* Aw x)))))]
+               (λ (Aw) (list '() (scale Aw y) (scale Aw x)))))]
 
     [cons
      #'(λ (a b)
          (list (cons a b)
-               (λ (Aw) (list '() (car Aw) (cdr Aw)))))]
+               (λ (Aw) (list '() (zero-car Aw) (zero-cdr Aw)))))]
 
     [car
      #'(λ (xs)
@@ -69,7 +70,7 @@
     [make-list
      #'(λ (n x)
          (list (make-list n x)
-               (λ (Aw) (list '() 0 (apply + Aw)))))]
+               (λ (Aw) (list '() 0 (apply add Aw)))))]
 
 
 

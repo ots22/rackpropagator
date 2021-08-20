@@ -12,7 +12,8 @@
          coerce-zero
          zero-car
          zero-cdr
-         add)
+         add
+         scale)
 
 (define (zero a)
   (cond
@@ -57,3 +58,8 @@
     [(pair? a) (cons (add (car a) (car b))
                      (add (cdr a) (cdr b)))]
     [else (+ a b)]))
+
+(define (scale a b)
+  (cond
+    [(gen-zero? a) a]
+    [else (* a b)]))
