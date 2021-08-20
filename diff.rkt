@@ -18,8 +18,9 @@
          "primitives.rkt")
 
 (module+ test
-  (require rackunit
-           syntax/macro-testing))
+  (require racket/match
+           syntax/macro-testing
+           rackunit))
 
 (define-for-syntax (prim-definition prim)
   (syntax-parse prim
@@ -257,6 +258,12 @@
     (check-exn
      exn:fail?
      (λ () (<-y 1))))
+
+  (test-case "match-let"
+    (define Df (D+ (λ (x) (match-let ([(list a b) x]) (+ a b)))))
+    (define-values (y <-y) (Df '(1 2)))
+    (check-equal? y 3)
+    (check-equal? (<-y 1) '((1 1))))
 
   ;;
   )
