@@ -81,7 +81,8 @@
 (define-syntax-class anf1-val
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
-  (pattern (quote c))
+  (pattern (quote e))
+  (pattern (quote-syntax e))
   (pattern x)
   (pattern (#%plain-lambda formals M)))
 
@@ -108,7 +109,8 @@
 (define-syntax-class anf2-val
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
-  (pattern (quote c))
+  (pattern (quote e))
+  (pattern (quote-syntax e))
   (pattern x)
   (pattern (#%plain-lambda formals S)))
 
@@ -130,7 +132,8 @@
 (define-syntax-class anf3-val
   #:conventions (anf3-convention)
   #:literal-sets (kernel-literals)
-  (pattern (quote c))
+  (pattern (quote e))
+  (pattern (quote-syntax e))
   (pattern x)
   (pattern (#%plain-lambda formals M)))
 
@@ -285,10 +288,15 @@
      #:with t (generate-temporary)
      #`(combining-letrec (((t) (#%plain-lambda formals S)))
          #,(k #'t))]
-    [(quote c)
+    [(quote e)
      #:with t (generate-temporary)
-     #`(combining-letrec (((t) (quote c)))
-         #,(k #'t))]))
+     #`(combining-letrec (((t) (quote e)))
+         #,(k #'t))]
+    [(quote-syntax e)
+     #:with t (generate-temporary)
+     #`(combining-letrec (((t) (quote-syntax e)))
+         #,(k #'t))]
+    ))
 
 (define (anf2-normalize stx)
   (anf1->2 (anf1-normalize stx)))
@@ -301,9 +309,10 @@
     #:conventions (anf1+2-convention)
     #:literal-sets (kernel-literals)
     #:literals (combining-letrec)
-    [x #'x]
+    [x stx]
 
-    [(quote c) #'(quote c)]
+    [(quote e) stx]
+    [(quote-syntax e) stx]
 
     [(#%plain-lambda formals S)
      #:with u* (anf2->3 #'S)

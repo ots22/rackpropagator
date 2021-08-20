@@ -68,8 +68,11 @@
     #:local-conventions ([#rx"^x" id/backprop-ids]
                          [lhs id/backprop-ids])
     #:literal-sets (kernel-literals)
-    [((lhs) (quote c))
-     (list #'(lhs.tagged (quote c)))]
+    [((lhs) (quote e))
+     (list #'(lhs.tagged (quote e)))]
+
+    [((lhs) (quote-syntax e))
+     (list #'(lhs.tagged (quote-syntax e)))]
 
     [((lhs) x)
      #:do [(define prims (if (member #'x bound-ids free-identifier=?)
@@ -106,7 +109,10 @@
     #:local-conventions ([#rx"^x" id/backprop-ids]
                          [lhs id/backprop-ids])
     #:literal-sets (kernel-literals)
-    [((lhs) (quote c))
+    [((lhs) (quote e))
+     #'(() (lhs.sensitivity))]
+
+    [((lhs) (quote-syntax e))
      #'(() (lhs.sensitivity))]
 
     [((lhs) x)
