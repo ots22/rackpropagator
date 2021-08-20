@@ -23,7 +23,7 @@
 
 (define-for-syntax (prim-definition prim)
   (syntax-parse prim
-    #:literals (+ - * / cons car cdr list identity apply make-list gen-zero)
+    #:literals (+ - * / cons car cdr unsafe-car unsafe-cdr list identity apply make-list gen-zero)
     [+
      #'(λ xs
          (list (apply + xs)
@@ -47,6 +47,15 @@
     [cdr
      #'(λ (xs)
          (list (cdr xs)
+               (λ (Aw) (list '() (cons (gen-zero) Aw)))))]
+
+    [unsafe-car
+     #'(λ (xs)
+         (list (unsafe-car xs)
+               (λ (Aw) (list '() (cons Aw (gen-zero))))))]
+    [unsafe-cdr
+     #'(λ (xs)
+         (list (unsafe-cdr xs)
                (λ (Aw) (list '() (cons (gen-zero) Aw)))))]
 
     [list
@@ -176,6 +185,43 @@
     (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
                   '(12.0 0.0)))
 
+  (test-case "pow 2"
+    (define D+pow
+      (D+ (λ (x n)
+            (define (pow x n r) (if (= n 0) r (pow x (- n 1) (* r x))))
+            (pow x n 1))))
+
+    (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
+                  '(12.0 0.0)))
+
+  (test-case "scale gen-zero"
+    (define D+pow
+      (D+ (λ (x)
+            ;; f accumulates a result into r, but do not use it. Check
+            ;; that the backpropagator can handle scaling by the
+            ;; resulting gen-zero sensitivity.
+            (define (f x r) (if (< x 0) 1 (f (- x 1) (* r x))))
+            (f x 1))))
+
+    (check-equal? ((backprop (D+pow 2.0)) 1.0)
+                  '(0.0)))
+
+  (test-case "Mutual recursion"
+    (define D+fn
+      (D+
+       (λ (x n)
+         (letrec ([f (λ (x n) (if (= n 0)
+                                  x
+                                  (* x (g x (- n 1)))))]
+                  [g (λ (x n) (if (= n 0)
+                                  x
+                                  (+ x (f x (- n 1)))))])
+           (f x n)))))
+
+    (let-values ([(y <-y) (D+fn 5 5)])
+      (check-equal? y 775)
+      (check-equal? (<-y 1.0) '(585.0 0.0))))
+
   (test-case "Different final use"
     (check-equal?
      ((backprop ((D+ (λ (x) (let ([b 1]) x))) 2)) 1)
@@ -203,14 +249,20 @@
      '(0.0 1.0 0.0))
     )
 
+  (test-case "Primitive binding"
+    (define * +)
+    (define-values (y <-y) ((D+ (λ (x) (* x x))) 10))
+    (check-equal? y 20)
+    ;; TODO: fix this
+    (check-exn
+     exn:fail?
+     (λ () (<-y 1))))
+
   ;;
   )
 
 
 ;; TODO
-
-;; More examples - does anything break with this model?
-;;   - Try example with mutually recursive functions
 
 ;; tidy up/refactor sum-destructuring-lazy-letrec and use of it
 
@@ -218,7 +270,7 @@
 
 ;; more backpropagators
 
-;; example with repeated use of D+ (depends on fixing lambda formals)
+;; example with repeated use of D+
 
 ;; trick for defining additional primitives nicely/extensibly
 ;; perhaps both:
@@ -227,14 +279,14 @@
 ;;     then 'register' using the trick)
 
 ;; cosmetics for D+:
-;;   - coerce gen-zero
-;;   - drop closure variables
-;;   - *explicit* closure variables can be passed by user
+;;   - explicit closure variables can be passed by user
 
 ;; multiple values:
 ;;   - support in let-bindings and return from functions
 ;;   - use to return closure variables to avoid destructuring operations
 
 ;; set! (and functions that mutate)
-
-;; quote-syntax
+;;   - global table of adjoints (of values - set-box! rather than set!)
+;;   - uses of 'box' create something in the adjoint table (representing
+;;     the internal state - or something like that)
+;;   - convert uses of set! into set-box!
