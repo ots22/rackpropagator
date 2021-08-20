@@ -82,7 +82,7 @@
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
   (pattern (quote e))
-  (pattern (quote-syntax e))
+  (pattern (quote-syntax e {~optional #:local}))
   (pattern x)
   (pattern (#%plain-lambda formals M)))
 
@@ -110,7 +110,7 @@
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
   (pattern (quote e))
-  (pattern (quote-syntax e))
+  (pattern (quote-syntax e {~optional #:local}))
   (pattern x)
   (pattern (#%plain-lambda formals S)))
 
@@ -133,7 +133,7 @@
   #:conventions (anf3-convention)
   #:literal-sets (kernel-literals)
   (pattern (quote e))
-  (pattern (quote-syntax e))
+  (pattern (quote-syntax e {~optional #:local}))
   (pattern x)
   (pattern (#%plain-lambda formals M)))
 
@@ -290,11 +290,13 @@
          #,(k #'t))]
     [(quote e)
      #:with t (generate-temporary)
-     #`(combining-letrec (((t) (quote e)))
+     #:with v* v
+     #`(combining-letrec (((t) v*))
          #,(k #'t))]
-    [(quote-syntax e)
+    [(quote-syntax e {~optional #:local})
      #:with t (generate-temporary)
-     #`(combining-letrec (((t) (quote-syntax e)))
+     #:with v* v
+     #`(combining-letrec (((t) v*))
          #,(k #'t))]
     ))
 
@@ -312,7 +314,7 @@
     [x stx]
 
     [(quote e) stx]
-    [(quote-syntax e) stx]
+    [(quote-syntax e {~optional #:local}) stx]
 
     [(#%plain-lambda formals S)
      #:with u* (anf2->3 #'S)
