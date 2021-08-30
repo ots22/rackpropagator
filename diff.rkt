@@ -1,6 +1,8 @@
 #lang racket/base
 
-(require (for-syntax racket/base
+(require (for-template racket/base
+                       "anf.rkt")
+         (for-syntax racket/base
                      racket/list
                      racket/function
                      racket/syntax
@@ -15,6 +17,7 @@
          racket/list
          racket/function
          racket/unsafe/ops
+         "anf.rkt"
          "primitives.rkt")
 
 (module+ test
@@ -27,47 +30,47 @@
     #:literals (+ - * / cons car cdr unsafe-car unsafe-cdr list identity apply make-list gen-zero)
     [+
      #'(λ xs
-         (list (apply + xs)
-               (λ (Aw) (cons '() (make-list (length xs) Aw)))))]
+         (values (λ (Aw) (cons '() (make-list (length xs) Aw)))
+                 (apply + xs)))]
 
     ;; TODO fix signature
     [*
      #'(λ (x y)
-         (list (* x y)
-               (λ (Aw) (list '() (scale Aw y) (scale Aw x)))))]
+         (values (λ (Aw) (list '() (scale Aw y) (scale Aw x)))
+                 (* x y)))]
 
     [cons
      #'(λ (a b)
-         (list (cons a b)
-               (λ (Aw) (list '() (zero-car Aw) (zero-cdr Aw)))))]
+         (values (λ (Aw) (list '() (zero-car Aw) (zero-cdr Aw)))
+                 (cons a b)))]
 
     [car
      #'(λ (xs)
-         (list (car xs)
-               (λ (Aw) (list '() (cons Aw (gen-zero))))))]
+         (values (λ (Aw) (list '() (cons Aw (gen-zero))))
+                 (car xs)))]
     [cdr
      #'(λ (xs)
-         (list (cdr xs)
-               (λ (Aw) (list '() (cons (gen-zero) Aw)))))]
+         (values (λ (Aw) (list '() (cons (gen-zero) Aw)))
+                 (cdr xs)))]
 
     [unsafe-car
      #'(λ (xs)
-         (list (unsafe-car xs)
-               (λ (Aw) (list '() (cons Aw (gen-zero))))))]
+         (values (λ (Aw) (list '() (cons Aw (gen-zero))))
+                 (unsafe-car xs)))]
     [unsafe-cdr
      #'(λ (xs)
-         (list (unsafe-cdr xs)
-               (λ (Aw) (list '() (cons (gen-zero) Aw)))))]
+         (values (λ (Aw) (list '() (cons (gen-zero) Aw)))
+                 (unsafe-cdr xs)))]
 
     [list
      #'(λ xs
-         (list xs
-               (λ (Aw) (cons '() Aw))))]
+         (values (λ (Aw) (cons '() Aw))
+                 xs))]
 
     [identity
      #'(λ (x)
-         (list x
-               (λ (Aw) (list '() Aw))))]
+         (values (λ (Aw) (list '() Aw))
+                 x))]
 
     ;; TODO fix signature
     ;; [apply
@@ -79,32 +82,34 @@
 
     [make-list
      #'(λ (n x)
-         (list (make-list n x)
-               (λ (Aw) (list '() 0 (apply add Aw)))))]
+         (values (λ (Aw) (list '() 0 (apply add Aw)))
+                 (make-list n x)))]
 
 
 
     [other #'(if (procedure? other)
                  (λ xs
-                   (list
-                    (apply other xs)
+                   (values
                     (λ (Aw)
                       (if (gen-zero? Aw)
                           (cons '() (make-list (length xs) Aw))
                           (raise-arguments-error 'prim-definition
                                                  "Backpropagator unknown"
-                                                 "op" 'other)))))
+                                                 "op" 'other)))
+                    (apply other xs)))
                  other)]))
 
 (define-syntax-rule (primal De)
-  (let-values ([(p b) De]) p))
+  (call-with-values (λ () De)
+                    (λ vs (apply values (cdr vs)))))
 
 (define-syntax-rule (backprop De)
-  (let-values ([(p b) De]) b))
+  (call-with-values (λ () De)
+                    (λ vs (apply values (car vs)))))
 
 (define-syntax (D+ stx)
   (syntax-parse stx
-    #:literal-sets (kernel-literals)
+    #:literal-sets (anf-literals)
     [(_ e)
      ;;; Currently need to 'expand' here twice. The anf routines work
      ;;; with expanded programs, but also introduce identifiers, which
@@ -117,14 +122,20 @@
      #'(let* ([prim-intro prim-def] ...)
          (let ([D+f De*])
            (λ xs
-             (let ([primal+backprop (apply D+f xs)])
-               (values (car primal+backprop)
-                       (λ Aw
-                         (coerce-zero
-                          ;; drop terms from closed-over variables
-                          (cdr (apply (cadr primal+backprop) Aw))
-                          xs)))))))]))
+             (let-values ([(<-y ys) (call-with-values
+                                     (λ () (apply D+f xs))
+                                     (λ xs (values (car xs) (cdr xs))))])
+               (apply values
+                      (λ Aw
+                        (coerce-zero
+                         ;; drop terms from closed-over variables
+                         (cdr (apply b Aw))
+                         xs))
+                      ys)))))
+     ]))
 
+
+#|
 (module+ test
   (test-case "plus"
     (check-not-exn
@@ -267,7 +278,7 @@
 
   ;;
   )
-
+|#
 
 ;; TODO
 
@@ -291,6 +302,8 @@
 ;; multiple values:
 ;;   - support in let-bindings and return from functions
 ;;   - use to return closure variables to avoid destructuring operations
+
+;; begin/begin0 as (let () ...) (?); multiple let body forms
 
 ;; set! (and functions that mutate)
 ;;   - global table of adjoints (of values - set-box! rather than set!)
