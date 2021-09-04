@@ -272,13 +272,18 @@
     (check-equal?
      ((backprop ((D+ (λ (x . xs) (car xs))) 2.0 3.0 4.0)) 1.0)
      '(0.0 1.0 0.0))
-    )
+
+    (check-equal?
+     ((backprop ((D+ (λ (x . xs) (list* x xs))) 1 2)) '(0 1))
+     '(0 1)))
 
   (test-case "Primitive binding"
+    ;; Backpropagator determined via binding, so this won't work (* is
+    ;; now a new, unknown binding, unrelated to the shadowed * binding
+    ;; and binding of +)
     (define * +)
     (define-values (<-y y) ((D+ (λ (x) (* x x))) 10))
     (check-equal? y 20)
-    ;; TODO: fix this
     (check-exn
      exn:fail?
      (λ () (<-y 1))))
@@ -301,10 +306,14 @@
         (D+ (λ (y) ((backprop ((D+ (λ (x) (+ x x))) y)) 1)))))))
 
   (test-case "Multiple values"
-    (check-equal? 
-     (call-with-values (λ () (primal ((D+ (λ (y) (values 1 2))) 1)))
-                       list)
-     '(1 2)))
+    (define Df (D+ (λ (x y) (values x y (list y x) (+ x y)))))
+    (define-values (<-y y1 y2 y3 y4) (Df -1.0 2.0))
+    (check-equal? (list y1 y2 y3 y4) '(-1.0 2.0 (2.0 -1.0) 1.0))
+    (check-equal? (<-y 1.0 0.0 '(0.0 0.0) 0.0) '(1.0 0.0))
+    (check-equal? (<-y 0.0 1.0 '(0.0 0.0) 0.0) '(0.0 1.0))
+    (check-equal? (<-y 0.0 0.0 '(1.0 0.0) 0.0) '(0.0 1.0))
+    (check-equal? (<-y 0.0 0.0 '(0.0 1.0) 0.0) '(1.0 0.0))
+    (check-equal? (<-y 0.0 0.0 '(0.0 0.0) 1.0) '(1.0 1.0)))
   ;;
   )
 
