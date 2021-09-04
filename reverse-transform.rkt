@@ -2,9 +2,7 @@
 
 (require (for-template racket/base
                        "anf.rkt"
-                       (only-in "util.rkt"
-                                destructuring-sum-letrec
-                                destructuring-sum-lazy-letrec)
+                       (only-in "util.rkt" destructuring-sum-let*)
                        "primitives.rkt")
          (for-syntax racket/base
                      "anf.rkt")
@@ -44,6 +42,18 @@
            #:attr tagged (tagged #'x)
            #:attr dummy (dummy #'x)))
 
+(define-syntax-class nested-let-values
+  #:literal-sets (anf-literals)
+  (pattern (let-values (B ...)
+             body:nested-let-values)
+           #:attr (bindings 1) (append (syntax-e #'(B ...))
+                                       (syntax-e #'(body.bindings ...)))
+           #:attr result #'body.result)
+  (pattern (let-values (B ...)
+             body:anf-let-final/backprop-ids)
+           #:attr (bindings 1) (syntax->list #'(B ...))
+           #:attr result #'body))
+
 (define-syntax-class anf-let-final/backprop-ids
   #:literal-sets (anf-literals)
   #:local-conventions ([#rx"^x" id/backprop-ids])
@@ -57,33 +67,31 @@
            #:attr formals #'(xs ... . xn)
            #:attr tagged #'(#%plain-app anf-apply values xs.tagged ... xn.tagged)))
 
-;; the sensitivities are thunks (defined with destructuring-sum-lazy-letrec)
-;; sensitivity-result produces a result of the appropriate shape, forcing each thunk
 (define-syntax-class lambda-formals/backprop-ids
   (pattern (x:id/backprop-ids ...)
            #:attr (vars 1) (syntax->list #'(x ...))
            #:attr (sensitivity-vars 1) (syntax->list #'(x.sensitivity ...))
-           #:attr (sensitivity-result 1) (syntax->list #'((x.sensitivity) ... null))
+           #:attr (sensitivity-result 1) (syntax->list #'(x.sensitivity ... null))
            #:attr tagged #'(x.tagged ...)
            #:attr dummy #'(x.dummy ...)
            #:attr (dummy-vars 1) (syntax->list #'(x.dummy ...)))
   (pattern xs:id/backprop-ids
            #:attr (vars 1) (syntax->list #'(xs))
            #:attr (sensitivity-vars 1) (syntax->list #'(xs.sensitivity))
-           #:attr (sensitivity-result 1) (syntax->list #'((xs.sensitivity)))
+           #:attr (sensitivity-result 1) (syntax->list #'(xs.sensitivity))
            #:attr tagged #'xs.tagged
            #:attr dummy #'xs.dummy
            #:attr (dummy-vars 1) (syntax->list #'(xs.dummy)))
   (pattern (x:id/backprop-ids ...+ . xs:id/backprop-ids)
            #:attr (vars 1) (syntax->list #'(x ... xs))
            #:attr (sensitivity-vars 1) (syntax->list #'(x.sensitivity ... xs.sensitivity))
-           #:attr (sensitivity-result 1) (syntax->list #'((x.sensitivity) ... (xs.sensitivity)))
+           #:attr (sensitivity-result 1) (syntax->list #'(x.sensitivity ... xs.sensitivity))
            #:attr tagged #'(x.tagged ... . xs.tagged)
            #:attr dummy #'(x.dummy ... . xs.dummy)
            #:attr (dummy-vars 1) (syntax->list #'(x.dummy ... xs.dummy))))
 
 ;; Note: takes a 'let-values' style binding, and produces a binding
-;; form for sum-destructuring-letrec (sheds one level of parens around
+;; form for destructuring-sum-let* (sheds one level of parens around
 ;; the id)
 (define (ϕ b bound-ids)
   (syntax-parse b
@@ -106,7 +114,7 @@
      #:with (x-free ...) (free-vars #'(#%plain-lambda formals M))
      #:with (transformed-expr (prim _) ...)
             (reverse-transform #'(#%plain-lambda formals M) bound-ids)
-     (cons #'(lhs.tagged transformed-expr)
+     (cons #'((lhs.tagged) transformed-expr)
            (syntax-e #'(prim ...)))]
 
     ;; If any of x0 xs ... are not in the list of bound ids, add to the list of ids
@@ -117,6 +125,22 @@
               (set-subtract (immutable-free-id-set (syntax-e #'(x0 xs ...)))
                             (immutable-free-id-set bound-ids))))]
      (cons #'((lhs0.backprop lhs0.tagged lhs.tagged ...) (x0.tagged xs.tagged ...))
+           prims)]
+
+    [((lhs) (#%plain-app call-with-values
+                         (#%plain-lambda () (#%plain-app x0 xs ...))
+                         list))
+     #:do [(define prims
+             (set->list
+              (set-subtract (immutable-free-id-set (append (syntax-e #'(x0 xs ...))
+                                                           (list #'list #'call-with-values)))
+                            (immutable-free-id-set bound-ids))))]
+     ;; call-with-values list means the backprop will be the car of a
+     ;; list, and any values returned by the function will be its cdr
+     (cons #'(([lhs.backprop . lhs.tagged])
+              (#%plain-app call-with-values
+                           (#%plain-lambda () (#%plain-app x0.tagged xs.tagged ...))
+                           list))
            prims)]
 
     [((lhs) (if x-test (#%plain-app x-true) (#%plain-app x-false)))
@@ -132,24 +156,32 @@
                          [lhs id/backprop-ids])
     #:literal-sets (anf-literals)
     [((lhs) c)
-     #'(() (lhs.sensitivity))]
+     #'(([]) lhs.sensitivity)]
 
     [((lhs) x)
-     #'(x.sensitivity (lhs.sensitivity))]
+     #'((x.sensitivity) lhs.sensitivity)]
 
     [((lhs) (#%plain-lambda formals M))
      #:with (x-free ...) (free-vars #'(#%plain-lambda formals M))
-     #'((x-free.sensitivity ...) (lhs.sensitivity))]
+     #'(([x-free.sensitivity ...]) lhs.sensitivity)]
 
     [((lhs0 lhs ...) (#%plain-app x0 xs ...))
-     #'((x0.sensitivity xs.sensitivity ...)
-        (lhs0.backprop (lhs0.sensitivity) (lhs.sensitivity) ...))]
+     #'(([x0.sensitivity xs.sensitivity ...])
+        (lhs0.backprop lhs0.sensitivity lhs.sensitivity ...))]
 
+    [((lhs) (#%plain-app call-with-values
+                         (#%plain-lambda () (#%plain-app x0 xs ...))
+                         list))
+     ;; lhs.backprop expects as many arguments as return values of x0
+     ;; - these are the elements of the list lhs.sensitivity
+     #'(([x0.sensitivity xs.sensitivity ...])
+        (apply lhs.backprop lhs.sensitivity))]
+    
     [((lhs) (if x-test (#%plain-app x-true) (#%plain-app x-false)))
-     #'((x-true.sensitivity x-false.sensitivity)
+     #'(([x-true.sensitivity x-false.sensitivity])
         (if x-test.tagged
-            (list (car (lhs.backprop (lhs.sensitivity))) (gen-zero))
-            (list (gen-zero) (car (lhs.backprop (lhs.sensitivity))))))]
+            (list (car (lhs.backprop lhs.sensitivity)) (gen-zero))
+            (list (gen-zero) (car (lhs.backprop lhs.sensitivity)))))]
     ;;
     ))
 
@@ -163,39 +195,38 @@
     #:literal-sets (anf-literals)
 
     [{~and lam (#%plain-lambda formals
-                 (letrec-values {~and (B ...) orig-bindings}
-                   result:anf-let-final/backprop-ids))}
-     ;; #:when (andmap free-identifier=?
-     ;;                (syntax->list #'(Bn.xs ...))
-     ;;                (syntax->list #'(xns* ...)))
+                 body:nested-let-values)}
+     #:with (B ...) #'(body.bindings ...)
+     #:with (x ...) #'(B.xs ... ...)
      #:do [(define bound-ids* (append bound-ids
                                       (syntax->list #'(formals.vars ...))
-                                      (syntax->list #'(B.xs ... ...))))]
+                                      (syntax->list #'(x ...))))]
      ;; Note: free-vars returns only let/lambda bindings. These will be
      ;; a subset of bound-ids* that are used in the lambda body.
-     #:with (x ...) #'(B.xs ... ...)
+
+     #:with result:anf-let-final/backprop-ids #'body.result
      #:with result-formals #'result.formals
      #:with (x-free ...) (free-vars #'lam)
      #:with ((primal-bindings prim ...) ...)
-            (stx-map (curryr ϕ bound-ids*) #'orig-bindings)
-     #:with (backprop-bindings ...) (map ρ (reverse (syntax-e #'orig-bindings)))
+            (stx-map (curryr ϕ bound-ids*) #'(B ...))
+     #:with (backprop-bindings ...) (map ρ (reverse (syntax-e #'(B ...))))
      (cons
       #'(λ formals.tagged
-          (destructuring-sum-letrec (primal-bindings ...)
+          (destructuring-sum-let* (primal-bindings ...)
              (values (λ result-formals.dummy
-                       (destructuring-sum-lazy-letrec
-                        ([x-free.sensitivity (gen-zero)] ...
-                         [formals.sensitivity-vars (gen-zero)] ...
-                         [x.sensitivity (gen-zero)] ...
-                         [result-formals.sensitivity-vars result-formals.dummy-vars] ...
+                       (destructuring-sum-let*
+                        ([(x-free.sensitivity) (gen-zero)] ...
+                         [(formals.sensitivity-vars) (gen-zero)] ...
+                         [(x.sensitivity) (gen-zero)] ...
+                         [(result-formals.sensitivity-vars) result-formals.dummy-vars] ...
                          backprop-bindings ...)
-                        (list* (list (x-free.sensitivity) ...)
+                        (list* (list x-free.sensitivity ...)
                                formals.sensitivity-result ...)))
                      result.tagged)))
       (syntax-e #'((prim prim.tagged) ... ...)))]
 
     ;; The cases below introduce potentially dangerous modifications
-    ;; of the fully-expanded syntax: the introduced temporary tmp
+    ;; of the fully-expanded syntax: the introduced temporaries tmp/tmps/tmpn
     ;; cannot be returned by free-vars so this is in fact okay.
     ;;
     ;; All cases are then handled uniformly, with the first case
@@ -203,37 +234,23 @@
     [(#%plain-lambda formals x)
      #:with tmp (generate-temporary)
      #:with lam* #'(#%plain-lambda formals
-                     (letrec-values (((tmp) x))
+                     (let-values (((tmp) x))
                        tmp))
      (reverse-transform #'lam* bound-ids)]
 
     [(#%plain-lambda formals (#%plain-app values xs ...))
      #:with (tmps ...) (generate-temporaries #'(xs ...))
      #:with lam* #'(#%plain-lambda formals
-                     (letrec-values (((tmps ...) (#%plain-app values xs ...)))
+                     (let-values (((tmps ...) (#%plain-app values xs ...)))
                        (#%plain-app values tmps ...)))
      (reverse-transform #'lam* bound-ids)]
 
     [(#%plain-lambda formals (#%plain-app anf-apply values xs ... xn))
      #:with (tmps ... tmpn) (generate-temporaries #'(xs ... xn))
      #:with lam* #'(#%plain-lambda formals
-                     (letrec-values (((tmps) xs) ... ((tmpn) xn))
+                     (let-values (((tmps) xs) ... ((tmpn) xn))
                        (#%plain-app anf-apply values tmps ... tmpn)))
      (reverse-transform #'lam* bound-ids)]
-
-
-    ;; pattern to capture the last binding: not needed any more
-    ;; [(#%plain-lambda formals
-    ;;    (letrec-values (B ... Bn)
-    ;;      {~or* {~and xn {~seq xns* ...}}
-    ;;            (#%plain-app values . xns*)}))
-    ;;  #:with tmp (generate-temporary)
-    ;;  #:with lam* #'(#%plain-lambda formals
-    ;;                  (letrec-values (B ... Bn ((tmp) xn*))
-    ;;                    tmp))
-    ;;  (reverse-transform #'lam* bound-ids)]
-
-
 
     ;;
     ))
@@ -243,9 +260,38 @@
   (check-not-exn
    (λ ()
      (reverse-transform
-      #'(#%plain-lambda (x)
-          (letrec-values (((result) (#%plain-app + x x)))
-            (#%plain-app apply values result result)))))))
 
+      ;; #'(#%plain-lambda (x)
+      ;;                    (let-values (((result) (#%plain-app + x x)))
+      ;;                      (#%plain-app apply values result result)))
 
+      #'(#%plain-lambda
+         (x)
+         (let-values (((result) (#%plain-app + x x)))
+           (let-values (((g1554)
+                         (#%plain-app
+                          call-with-values
+                          (#%plain-lambda
+                           ()
+                           (#%plain-app apply values result result))
+                          list)))
+             (#%plain-app anf-apply values g1554))))))))
 
+(define rf 
+(reverse-transform
+
+      ;; #'(#%plain-lambda (x)
+      ;;                    (let-values (((result) (#%plain-app + x x)))
+      ;;                      (#%plain-app apply values result result)))
+
+      #'(#%plain-lambda
+         (x)
+         (let-values (((result) (#%plain-app + x x)))
+           (let-values (((g1554)
+                         (#%plain-app
+                          call-with-values
+                          (#%plain-lambda
+                           ()
+                           (#%plain-app apply values result result))
+                          list)))
+             (#%plain-app anf-apply values g1554))))))

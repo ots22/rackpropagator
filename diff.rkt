@@ -27,7 +27,7 @@
 
 (define-for-syntax (prim-definition prim)
   (syntax-parse prim
-    #:literals (+ - * / cons car cdr unsafe-car unsafe-cdr list identity apply make-list gen-zero)
+    #:literals (+ - * / cons car cdr unsafe-car unsafe-cdr list list* identity apply make-list gen-zero)
     [+
      #'(λ xs
          (values (λ (Aw) (cons '() (make-list (length xs) Aw)))
@@ -67,6 +67,15 @@
          (values (λ (Aw) (cons '() Aw))
                  xs))]
 
+    [list*
+     #'(λ xs
+         (values (λ (Aw)
+                   (cons '()
+                         (call-with-values
+                          (λ () (split-at Aw (sub1 (length xs))))
+                          (λ (head tail) (append head (list tail))))))
+                 (apply list* xs)))]
+
     [identity
      #'(λ (x)
          (values (λ (Aw) (list '() Aw))
@@ -84,8 +93,6 @@
      #'(λ (n x)
          (values (λ (Aw) (list '() 0 (apply add Aw)))
                  (make-list n x)))]
-
-
 
     [other #'(if (procedure? other)
                  (λ xs
@@ -105,7 +112,7 @@
 
 (define-syntax-rule (backprop De)
   (call-with-values (λ () De)
-                    (λ vs (apply values (car vs)))))
+                    (λ vs (car vs))))
 
 (define-syntax (D+ stx)
   (syntax-parse stx
@@ -129,13 +136,10 @@
                       (λ Aw
                         (coerce-zero
                          ;; drop terms from closed-over variables
-                         (cdr (apply b Aw))
+                         (cdr (apply <-y Aw))
                          xs))
-                      ys)))))
-     ]))
+                      ys)))))]))
 
-
-#|
 (module+ test
   (test-case "plus"
     (check-not-exn
@@ -163,18 +167,18 @@
                                (((λ (b)
                                    (λ (c)
                                      b)) a) 1)))]
-                  [(y <-y) (D+f 184.0)])
+                  [(<-y y) (D+f 184.0)])
      (check-equal? y 184.0)
      (check-equal? (<-y 1.0) '(1.0))))
 
   (test-case "conditional"
     (let*-values ([(D+f) (D+ (λ (a) (if (> a 10) a 0.0)))]
-                  [(primal1 backprop1) (D+f 5.0)]
-                  [(primal2 backprop2) (D+f 15.0)])
-      (check-equal? primal1 0.0)
-      (check-equal? primal2 15.0)
-      (check-equal? (backprop1 1.0) '(0.0))
-      (check-equal? (backprop2 1.0) '(1.0))))
+                  [(<-y1 y1) (D+f 5.0)]
+                  [(<-y2 y2) (D+f 15.0)])
+      (check-equal? y1 0.0)
+      (check-equal? y2 15.0)
+      (check-equal? (<-y1 1.0) '(0.0))
+      (check-equal? (<-y2 1.0) '(1.0))))
 
   (test-case "pow (Y)"
     (define D+pow
@@ -188,51 +192,53 @@
     (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
                   '(12.0 0.0)))
 
-  (test-case "pow"
-    (define D+pow
-      (D+ (λ (x n)
-            (define (pow x n) (if (= n 0) 1.0 (* x (pow x (- n 1)))))
-            (pow x n))))
+  ;; These fail: No letrec yet
+  
+  ;; (test-case "pow"
+  ;;   (define D+pow
+  ;;     (D+ (λ (x n)
+  ;;           (define (pow x n) (if (= n 0) 1.0 (* x (pow x (- n 1)))))
+  ;;           (pow x n))))
 
-    (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
-                  '(12.0 0.0)))
+  ;;   (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
+  ;;                 '(12.0 0.0)))
 
-  (test-case "pow 2"
-    (define D+pow
-      (D+ (λ (x n)
-            (define (pow x n r) (if (= n 0) r (pow x (- n 1) (* r x))))
-            (pow x n 1))))
+  ;; (test-case "pow 2"
+  ;;   (define D+pow
+  ;;     (D+ (λ (x n)
+  ;;           (define (pow x n r) (if (= n 0) r (pow x (- n 1) (* r x))))
+  ;;           (pow x n 1))))
 
-    (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
-                  '(12.0 0.0)))
+  ;;   (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
+  ;;                 '(12.0 0.0)))
 
-  (test-case "scale gen-zero"
-    (define D+pow
-      (D+ (λ (x)
-            ;; f accumulates a result into r, but do not use it. Check
-            ;; that the backpropagator can handle scaling by the
-            ;; resulting gen-zero sensitivity.
-            (define (f x r) (if (< x 0) 1 (f (- x 1) (* r x))))
-            (f x 1))))
+  ;; (test-case "scale gen-zero"
+  ;;   (define D+pow
+  ;;     (D+ (λ (x)
+  ;;           ;; f accumulates a result into r, but do not use it. Check
+  ;;           ;; that the backpropagator can handle scaling by the
+  ;;           ;; resulting gen-zero sensitivity.
+  ;;           (define (f x r) (if (< x 0) 1 (f (- x 1) (* r x))))
+  ;;           (f x 1))))
 
-    (check-equal? ((backprop (D+pow 2.0)) 1.0)
-                  '(0.0)))
+  ;;   (check-equal? ((backprop (D+pow 2.0)) 1.0)
+  ;;                 '(0.0)))
 
-  (test-case "Mutual recursion"
-    (define D+fn
-      (D+
-       (λ (x n)
-         (letrec ([f (λ (x n) (if (= n 0)
-                                  x
-                                  (* x (g x (- n 1)))))]
-                  [g (λ (x n) (if (= n 0)
-                                  x
-                                  (+ x (f x (- n 1)))))])
-           (f x n)))))
+  ;; (test-case "Mutual recursion"
+  ;;   (define D+fn
+  ;;     (D+
+  ;;      (λ (x n)
+  ;;        (letrec ([f (λ (x n) (if (= n 0)
+  ;;                                 x
+  ;;                                 (* x (g x (- n 1)))))]
+  ;;                 [g (λ (x n) (if (= n 0)
+  ;;                                 x
+  ;;                                 (+ x (f x (- n 1)))))])
+  ;;          (f x n)))))
 
-    (let-values ([(y <-y) (D+fn 5 5)])
-      (check-equal? y 775)
-      (check-equal? (<-y 1.0) '(585.0 0.0))))
+  ;;   (let-values ([(y <-y) (D+fn 5 5)])
+  ;;     (check-equal? y 775)
+  ;;     (check-equal? (<-y 1.0) '(585.0 0.0))))
 
   (test-case "Different final use"
     (check-equal?
@@ -263,7 +269,7 @@
 
   (test-case "Primitive binding"
     (define * +)
-    (define-values (y <-y) ((D+ (λ (x) (* x x))) 10))
+    (define-values (<-y y) ((D+ (λ (x) (* x x))) 10))
     (check-equal? y 20)
     ;; TODO: fix this
     (check-exn
@@ -272,13 +278,29 @@
 
   (test-case "match-let"
     (define Df (D+ (λ (x) (match-let ([(list a b) x]) (+ a b)))))
-    (define-values (y <-y) (Df '(1 2)))
+    (define-values (<-y y) (Df '(1 2)))
     (check-equal? y 3)
     (check-equal? (<-y 1) '((1 1))))
 
+  (test-case "second derivative"
+    (check-not-exn
+     (λ ()
+       (convert-compile-time-error
+        (D+ (λ (y) ((backprop ((D+ (λ (x) x)) y)) 1))))))
+
+    (check-not-exn
+     (λ ()
+       (convert-compile-time-error
+        (D+ (λ (y) ((backprop ((D+ (λ (x) (+ x x))) y)) 1)))))))
+
+  (test-case "Multiple values"
+    (check-equal? 
+     (call-with-values (λ () ((D+ (λ (y) (values 1 2))) 1))
+                       list)
+     '(1 2)))
   ;;
   )
-|#
+
 
 ;; TODO
 
