@@ -27,7 +27,8 @@
 
 (define-for-syntax (prim-definition prim)
   (syntax-parse prim
-    #:literals (+ - * / cons car cdr unsafe-car unsafe-cdr list list* identity apply make-list gen-zero)
+    #:literals (+ - * / cons car cdr unsafe-car unsafe-cdr list list* identity
+                apply make-list gen-zero)
     [+
      #'(λ xs
          (values (λ (Aw) (cons '() (make-list (length xs) Aw)))
@@ -96,14 +97,15 @@
 
     [other #'(if (procedure? other)
                  (λ xs
-                   (values
-                    (λ (Aw)
-                      (if (gen-zero? Aw)
-                          (cons '() (make-list (length xs) Aw))
-                          (raise-arguments-error 'prim-definition
-                                                 "Backpropagator unknown"
-                                                 "op" 'other)))
-                    (apply other xs)))
+                   (apply values
+                          (λ (Aw)
+                            (if (gen-zero? Aw)
+                                (cons '() (make-list (length xs) Aw))
+                                (raise-arguments-error 'prim-definition
+                                                       "Backpropagator unknown"
+                                                       "op" 'other)))
+                          (call-with-values (λ () (apply other xs))
+                                            list)))
                  other)]))
 
 (define-syntax-rule (primal De)
@@ -295,7 +297,7 @@
 
   (test-case "Multiple values"
     (check-equal? 
-     (call-with-values (λ () ((D+ (λ (y) (values 1 2))) 1))
+     (call-with-values (λ () (primal ((D+ (λ (y) (values 1 2))) 1)))
                        list)
      '(1 2)))
   ;;

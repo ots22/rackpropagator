@@ -59,13 +59,13 @@
   #:local-conventions ([#rx"^x" id/backprop-ids])
   (pattern x
            #:attr formals #'(x)
-           #:attr tagged #'x.tagged)
+           #:attr (tagged 1) (list #'x.tagged #'null))
   (pattern (#%plain-app values xs ...)
            #:attr formals #'(xs ...)
-           #:attr tagged #'(#%plain-app values xs.tagged ...))
+           #:attr (tagged 1) (syntax->list #'(xs.tagged ... null)))
   (pattern (#%plain-app anf-apply values xs ... xn)
            #:attr formals #'(xs ... . xn)
-           #:attr tagged #'(#%plain-app anf-apply values xs.tagged ... xn.tagged)))
+           #:attr (tagged 1) (syntax->list #'(xs.tagged ... xn.tagged))))
 
 (define-syntax-class lambda-formals/backprop-ids
   (pattern (x:id/backprop-ids ...)
@@ -213,16 +213,17 @@
      (cons
       #'(λ formals.tagged
           (destructuring-sum-let* (primal-bindings ...)
-             (values (λ result-formals.dummy
-                       (destructuring-sum-let*
-                        ([(x-free.sensitivity) (gen-zero)] ...
-                         [(formals.sensitivity-vars) (gen-zero)] ...
-                         [(x.sensitivity) (gen-zero)] ...
-                         [(result-formals.sensitivity-vars) result-formals.dummy-vars] ...
-                         backprop-bindings ...)
-                        (list* (list x-free.sensitivity ...)
-                               formals.sensitivity-result ...)))
-                     result.tagged)))
+            (apply values
+                   (λ result-formals.dummy
+                     (destructuring-sum-let*
+                         ([(x-free.sensitivity) (gen-zero)] ...
+                          [(formals.sensitivity-vars) (gen-zero)] ...
+                          [(x.sensitivity) (gen-zero)] ...
+                          [(result-formals.sensitivity-vars) result-formals.dummy-vars] ...
+                          backprop-bindings ...)
+                       (list* (list x-free.sensitivity ...)
+                              formals.sensitivity-result ...)))
+                   result.tagged ...)))
       (syntax-e #'((prim prim.tagged) ... ...)))]
 
     ;; The cases below introduce potentially dangerous modifications
