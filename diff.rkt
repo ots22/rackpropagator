@@ -103,9 +103,9 @@
     [other #'(if (procedure? other)
                  (λ xs
                    (apply values
-                          (λ (Aw)
-                            (if (gen-zero? Aw)
-                                (cons '() (make-list (length xs) Aw))
+                          (λ Aws
+                            (if (andmap gen-zero? Aws)
+                                (cons '() (make-list (length xs) (gen-zero)))
                                 (raise-arguments-error 'prim-definition
                                                        "Backpropagator unknown"
                                                        "op" 'other)))
