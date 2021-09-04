@@ -28,7 +28,7 @@
 (define-for-syntax (prim-definition prim)
   (syntax-parse prim
     #:literals (+ - * / cons car cdr unsafe-car unsafe-cdr list list* identity
-                apply make-list gen-zero)
+                apply make-list gen-zero values)
     [+
      #'(λ xs
          (values (λ (Aw) (cons '() (make-list (length xs) Aw)))
@@ -81,6 +81,11 @@
      #'(λ (x)
          (values (λ (Aw) (list '() Aw))
                  x))]
+
+    [values
+     #'(λ xs
+         (apply values (λ Aw (cons '() Aw))
+                xs))]
 
     ;; TODO fix signature
     ;; [apply
