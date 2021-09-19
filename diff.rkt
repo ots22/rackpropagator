@@ -271,8 +271,6 @@
 
 ;; TODO
 
-;; tidy up/refactor sum-destructuring-lazy-letrec and use of it
-
 ;; error messages (macros/syntax)
 
 ;; more backpropagators
@@ -287,10 +285,6 @@
 
 ;; cosmetics for D+:
 ;;   - explicit closure variables can be passed by user
-
-;; multiple values:
-;;   - support in let-bindings and return from functions
-;;   - use to return closure variables to avoid destructuring operations
 
 ;; set! (and functions that mutate)
 ;;   - global table of adjoints (of values - set-box! rather than set!)
