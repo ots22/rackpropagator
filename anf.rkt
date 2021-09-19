@@ -244,15 +244,9 @@
      #:with t (generate-temporary)
      #`(let-values (((t) (#%plain-lambda formals S)))
          #,(k #'t))]
-    [(quote e)
+    [c
      #:with t (generate-temporary)
-     #:with v* v
-     #`(let-values (((t) v*))
-         #,(k #'t))]
-    [(quote-syntax e {~optional #:local})
-     #:with t (generate-temporary)
-     #:with v* v
-     #`(let-values (((t) v*))
+     #`(let-values (((t) c))
          #,(k #'t))]
     ))
 
