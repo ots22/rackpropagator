@@ -118,12 +118,12 @@
          (let ([D+f De*])
            (λ xs
              (let ([primal+backprop (apply D+f xs)])
-               (values (car primal+backprop)
-                       (λ Aw
-                         (coerce-zero
-                          ;; drop terms from closed-over variables
-                          (cdr (apply (cadr primal+backprop) Aw))
-                          xs)))))))]))
+               (values  (car primal+backprop)
+                        (λ Aw
+                          (coerce-zero
+                           ;; drop terms from closed-over variables
+                           (cdr (apply (cadr primal+backprop) Aw))
+                           xs)))))))]))
 
 (module+ test
   (test-case "plus"
@@ -177,51 +177,55 @@
     (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
                   '(12.0 0.0)))
 
-  (test-case "pow"
-    (define D+pow
-      (D+ (λ (x n)
-            (define (pow x n) (if (= n 0) 1.0 (* x (pow x (- n 1)))))
-            (pow x n))))
+  ;; TODO letrec
+  ;; (test-case "pow"
+  ;;   (define D+pow
+  ;;     (D+ (λ (x n)
+  ;;           (define (pow x n) (if (= n 0) 1.0 (* x (pow x (- n 1)))))
+  ;;           (pow x n))))
 
-    (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
-                  '(12.0 0.0)))
+  ;;   (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
+  ;;                 '(12.0 0.0)))
 
-  (test-case "pow 2"
-    (define D+pow
-      (D+ (λ (x n)
-            (define (pow x n r) (if (= n 0) r (pow x (- n 1) (* r x))))
-            (pow x n 1))))
+  ;; TODO letrec
+  ;; (test-case "pow 2"
+  ;;   (define D+pow
+  ;;     (D+ (λ (x n)
+  ;;           (define (pow x n r) (if (= n 0) r (pow x (- n 1) (* r x))))
+  ;;           (pow x n 1))))
 
-    (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
-                  '(12.0 0.0)))
+  ;;   (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
+  ;;                 '(12.0 0.0)))
 
-  (test-case "scale gen-zero"
-    (define D+pow
-      (D+ (λ (x)
-            ;; f accumulates a result into r, but do not use it. Check
-            ;; that the backpropagator can handle scaling by the
-            ;; resulting gen-zero sensitivity.
-            (define (f x r) (if (< x 0) 1 (f (- x 1) (* r x))))
-            (f x 1))))
+  ;; TODO letrec
+  ;; (test-case "scale gen-zero"
+  ;;   (define D+pow
+  ;;     (D+ (λ (x)
+  ;;           ;; f accumulates a result into r, but do not use it. Check
+  ;;           ;; that the backpropagator can handle scaling by the
+  ;;           ;; resulting gen-zero sensitivity.
+  ;;           (define (f x r) (if (< x 0) 1 (f (- x 1) (* r x))))
+  ;;           (f x 1))))
 
-    (check-equal? ((backprop (D+pow 2.0)) 1.0)
-                  '(0.0)))
+  ;;   (check-equal? ((backprop (D+pow 2.0)) 1.0)
+  ;;                 '(0.0)))
 
-  (test-case "Mutual recursion"
-    (define D+fn
-      (D+
-       (λ (x n)
-         (letrec ([f (λ (x n) (if (= n 0)
-                                  x
-                                  (* x (g x (- n 1)))))]
-                  [g (λ (x n) (if (= n 0)
-                                  x
-                                  (+ x (f x (- n 1)))))])
-           (f x n)))))
+  ;; TODO letrec
+  ;; (test-case "Mutual recursion"
+  ;;   (define D+fn
+  ;;     (D+
+  ;;      (λ (x n)
+  ;;        (letrec ([f (λ (x n) (if (= n 0)
+  ;;                                 x
+  ;;                                 (* x (g x (- n 1)))))]
+  ;;                 [g (λ (x n) (if (= n 0)
+  ;;                                 x
+  ;;                                 (+ x (f x (- n 1)))))])
+  ;;          (f x n)))))
 
-    (let-values ([(y <-y) (D+fn 5 5)])
-      (check-equal? y 775)
-      (check-equal? (<-y 1.0) '(585.0 0.0))))
+  ;;   (let-values ([(y <-y) (D+fn 5 5)])
+  ;;     (check-equal? y 775)
+  ;;     (check-equal? (<-y 1.0) '(585.0 0.0))))
 
   (test-case "Different final use"
     (check-equal?

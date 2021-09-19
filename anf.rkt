@@ -21,6 +21,10 @@
 ;; ----------------------------------------
 ;; Conventions and syntax classes
 
+(define-literal-set anf-literals
+  #:literal-sets (kernel-literals)
+  ())
+
 (define-syntax-class lambda-formals
   (pattern (x:id ...)
            #:attr vars #'(x ...))
@@ -29,16 +33,16 @@
   (pattern (x:id ...+ . xs:id)
            #:attr vars #'(x ... xs)))
 
-(define-syntax-class anf-const
-  (pattern a:boolean)
-  (pattern a:number)
-  (pattern ()))
+(define-syntax-class anf-simple-literal
+  #:literal-sets (kernel-literals)
+  (pattern (quote e))
+  (pattern (quote-syntax e {~optional #:local})))
 
 (define-conventions anf1+2-convention
   [#rx"^x" id]
   [formals lambda-formals]
 
-  [c anf-const]
+  [c anf-simple-literal]
 
   [#rx"^V" anf1-val]
   [#rx"^M" anf1-expr]
@@ -51,7 +55,7 @@
   [#rx"^x" id]
   [formals lambda-formals]
 
-  [c anf-const]
+  [c anf-simple-literal]
 
   [#rx"^V" anf2-val]
   [#rx"^B" anf2-binding-expr]
@@ -63,8 +67,7 @@
 (define-syntax-class anf1-val
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
-  (pattern (quote e))
-  (pattern (quote-syntax e {~optional #:local}))
+  (pattern c)
   (pattern x)
   (pattern (#%plain-lambda formals M)))
 
@@ -90,25 +93,24 @@
 (define-syntax-class anf2-val
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
-  (pattern (quote e))
-  (pattern (quote-syntax e {~optional #:local}))
+  (pattern c)
   (pattern x)
   (pattern (#%plain-lambda formals S)))
 
 (define-syntax-class anf2-binding-expr
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
-  (pattern W)
-  (pattern (#%plain-app x0 xs ...))
-  (pattern (if x-test
-               (#%plain-app x-true)
-               (#%plain-app x-false))))
+  (pattern ((x) {~and v W}))
+  (pattern ((x) {~and v (#%plain-app x0 xs ...)}))
+  (pattern ((x) {~and v (if x-test
+                            (#%plain-app x-true)
+                            (#%plain-app x-false))})))
 
 (define-syntax-class anf2-expr
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
   (pattern x)
-  (pattern (let-values (((x) B)) S)))
+  (pattern (let-values (B) S)))
   
 (define anf2? (syntax-class->predicate anf2-expr))
 
