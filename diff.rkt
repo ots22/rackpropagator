@@ -13,26 +13,124 @@
                      "anf.rkt"
                      "reverse-transform.rkt"
                      "primitives.rkt"
-                     "util.rkt")
+                     "util.rkt"
+                     "anf.rkt")
          racket/list
          racket/function
          racket/unsafe/ops
          "anf.rkt"
          "primitives.rkt")
 
+(provide D+)
+
 (module+ test
   (require racket/match
            syntax/macro-testing
            rackunit))
 
+(define (primal* p)
+  (cond
+    [(null? p) '()]
+    [(pair? p) (cons (primal* (car p))
+                     (primal* (cdr p)))]
+    [(procedure? p) (λ xs
+                      (call-with-values (λ () (apply p (primal* xs)))
+                                        ; drop backpropagator
+                                        (λ ys (apply values (cdr ys)))))]
+    [else p]))
+
+;; (define (unknown-backprop p-name n)
+;;   (λ Aw
+;;     (if (andmap gen-zero? Aw)
+;;         (cons '() (make-list n (gen-zero)))
+;;         (raise-arguments-error 'prim-definition
+;;                                "Backpropagator unknown"
+;;                                "op" p-name))))
+
+(define-syntax-rule (handle-unknown p p-name)
+  (cond
+;    [(null? p) '()]
+;    [(pair? p) (cons (handle-unknown (car p))
+;                    (handle-unknown (cdr p)))]
+    [(procedure? p)
+     (λ xs
+       (call-with-values
+        (λ () (apply p (primal* xs)))
+        (λ primal-vs
+          (apply values
+                 (λ Aw
+                   (if (andmap gen-zero? Aw)
+                       (cons '() (make-list (length xs) (gen-zero)))
+                       (raise-arguments-error 'prim-definition
+                                              "Backpropagator unknown"
+                                              "op" p-name)))
+                 primal-vs))))]
+    [else p]))
+
+
+;; (define (primal* p)
+;;   (if (procedure? p)
+       ;; (λ xs
+       ;;   (call-with-values (λ () (apply p (treemap primal* xs)))
+       ;;                     ; drop backpropagator
+       ;;                     (λ ys (apply values (cdr ys)))))
+;;       p))
+
+;; (define (handle-unknown p)
+;;   (if (procedure? p)
+;;       (λ xs
+;;         (call-with-values
+;;          (λ () (apply (primal* p) xs))
+;;          (λ primal-vs
+;;            (apply values
+;;                   (λ Aw
+;;                     (if (andmap gen-zero? Aw)
+;;                         (cons '() (make-list (length xs) (gen-zero)))
+                         ;; (raise-arguments-error 'prim-definition
+                         ;;                        "Backpropagator unknown"
+                         ;;                        "op" 'other)))
+;;                   primal-vs))))
+;;       p)
+
+(define-syntax my-apply
+  (let [(id (cadr (syntax->list (local-expand #'(apply) 'expression '()))))]
+    (make-rename-transformer id)))
+
+
 (define-for-syntax (prim-definition prim)
   (syntax-parse prim
     #:literals (+ - * / cons car cdr unsafe-car unsafe-cdr list list* identity
-                apply make-list gen-zero values)
+                anf-apply apply my-apply make-list gen-zero values primal* call-with-values compose
+                add coerce-zero null > =)
     [+
      #'(λ xs
          (values (λ (Aw) (cons '() (make-list (length xs) Aw)))
                  (apply + xs)))]
+
+    [-
+     #'(λ xs
+         (values (λ (Aw)
+                   (cons '()
+                         (if (= (length xs) 1)
+                             (scale Aw -1)
+                             (cons Aw (make-list (sub1 (length xs)) (scale Aw -1))))))
+                 (apply - xs)))]
+
+
+    [add
+     #'(λ xs
+         (values (λ (Aw) (cons '() (make-list (length xs) Aw)))
+                 (apply add xs)))]
+
+    [null #'null]
+
+    ;; [> #'(λ xs
+    ;;        (values (λ (Aw) (cons '() (make-list (length xs) 0.0)))
+    ;;                (apply > xs)))]
+
+    ;; [= #'(λ xs
+    ;;        (values (λ (Aw) (cons '() (make-list (length xs) 0.0)))
+    ;;                (apply = xs)))]
 
     ;; TODO fix signature
     [*
@@ -87,19 +185,51 @@
          (apply values (λ Aw (cons '() Aw))
                 xs))]
 
-    ;; TODO fix signature
-    ;; [apply
-    ;;  #'(λ (f args)
-    ;;      (let ([result (apply f args)])
-    ;;        (list (car result)
-    ;;              (λ (Aw)
-    ;;                (list '() ((cdr result) Aw))))))]
+    [{~or* anf-apply apply my-apply}
+     #'(λ (f . args)
+         (let-values ([(b result-vs)
+                       (call-with-values
+                        (λ () (apply apply f args)) ; intentional double apply
+                        (λ (b . result-vs) (values b result-vs)))])
+           (apply values
+                  (λ Aw
+                    (let*-values ([(^f+args) (apply b Aw)]
+                                  [(head tail) (split-at (cdr ^f+args) (sub1 (length args)))])
+                      (list* '() (car ^f+args) (append head (list tail)))))
+                  result-vs)))]
 
     [make-list
      #'(λ (n x)
          (values (λ (Aw) (list '() 0 (apply add Aw)))
                  (make-list n x)))]
 
+    [call-with-values
+     #'(λ (p c)
+         (let-values ([(b result-vs)
+                       (call-with-values
+                        p
+                        (λ (<-p . result-p)
+                          (call-with-values
+                           (λ () (apply c result-p))
+                           (λ (<-c . result-c)
+                             (values (λ Aw
+                                       (let* ([Aw-coerced (coerce-zero Aw result-c)]
+                                              [r1 (apply <-c Aw-coerced)]
+                                              [r2 (apply <-p (coerce-zero (cdr r1) result-p))])
+                                         (list '() (car r2) (car r1))))
+                                     result-c)))))])
+           (apply values b result-vs)))]
+
+    [gen-zero #'(λ () (values (λ (z) (list '()))
+                              (gen-zero)))]
+
+    [coerce-zero #'(λ (a b)
+                     (values
+                      (λ (Aw) (list '() Aw (gen-zero)))
+                      (coerce-zero a b)))]
+
+    ;; this isn't quite right
+    ;[other #'(handle-unknown other 'other)]
     [other #'(if (procedure? other)
                  (λ xs
                    (apply values
@@ -109,9 +239,24 @@
                                 (raise-arguments-error 'prim-definition
                                                        "Backpropagator unknown"
                                                        "op" 'other)))
-                          (call-with-values (λ () (apply other xs))
-                                            list)))
-                 other)]))
+                          (call-with-values (λ () (apply other xs)) list)))
+                 other)]
+
+           ;; #'(handle-unknown other 'other)
+           ;; #'(if (procedure? other)
+           ;;       (λ xs
+           ;;         (apply values
+           ;;                (λ Aws
+           ;;                  (if (andmap gen-zero? Aws)
+           ;;                      (cons '() (make-list (length xs) (gen-zero)))
+           ;;                      (raise-arguments-error 'prim-definition
+           ;;                                             "Backpropagator unknown"
+           ;;                                             "op" 'other)))
+           ;;                (call-with-values (λ () (apply other xs))
+           ;;                                  list)))
+           ;;       other)
+
+    ))
 
 (define-syntax-rule (primal De)
   (call-with-values (λ () De)
@@ -130,7 +275,7 @@
      ;;; might not be picked up by free-vars unless we expand again.
      #:do [(define simplified-e
              (anf-normalize (local-expand #'e 'expression '())))]
-     #:with (_ (((_) e*)) _) (local-expand simplified-e 'expression '())
+     #:with (_ (((_) e*)) _) simplified-e ;(local-expand simplified-e 'expression '())
      #:with (De* (prim:id prim-intro:id) ...) (reverse-transform #'e*)
      #:with (prim-def ...) (stx-map prim-definition #'(prim ...))
      #'(let* ([prim-intro prim-def] ...)
@@ -145,7 +290,23 @@
                          ;; drop terms from closed-over variables
                          (cdr (apply <-y Aw))
                          xs))
-                      ys)))))]))
+                      ys)))
+           ;; D+f
+           ))]))
+
+
+(define-syntax (D stx)
+  (syntax-parse stx
+    #:literal-sets (anf-literals)
+    [(_ e)
+     #:do [(define simplified-e
+             (anf-normalize (local-expand #'e 'expression '())))]
+     #:with (_ (((_) e*)) _) simplified-e ; (local-expand simplified-e 'expression '())
+     #:with (De* (prim:id prim-intro:id) ...) (reverse-transform #'e*)
+     #:with (prim-def ...) (stx-map prim-definition #'(prim ...))
+     #'(let* ([prim-intro prim-def] ...)
+         (λ xs ((backprop (apply De* xs)) 1)))]))
+
 
 (module+ test
   (test-case "plus"
@@ -165,7 +326,7 @@
      (λ ()
        (convert-compile-time-error
         (let ((y 1))
-          (D+ (lambda (x)
+          (D+ (λ (x)
                 (let ((result (+ x y)))
                   result))))))))
 
@@ -200,7 +361,7 @@
                   '(12.0 0.0)))
 
   ;; These fail: No letrec yet
-  
+
   ;; (test-case "pow"
   ;;   (define D+pow
   ;;     (D+ (λ (x n)
@@ -252,10 +413,11 @@
      ((backprop ((D+ (λ (x) (let ([b 1]) x))) 2)) 1)
      '(1))
 
-    (let ([D+f (let ([a 1]) (D+ (λ (x) (let ([b a]) x))))])
-      (check-equal?
-       ((backprop (D+f 2)) 1)
-       '(1))))
+    ;; (let ([D+f (let ([a 1]) (D+ (λ (x) (let ([b a]) x))))])
+    ;;   (check-equal?
+    ;;    ((backprop (D+f 2)) 1)
+    ;;    '(1)))
+    )
 
   (test-case "list/cons/car/cdr"
     (check-equal?
@@ -277,16 +439,16 @@
      ((backprop ((D+ (λ (x . xs) (list* x xs))) 1 2)) '(0 1))
      '(0 1)))
 
-  (test-case "Primitive binding"
-    ;; Backpropagator determined via binding, so this won't work (* is
-    ;; now a new, unknown binding, unrelated to the shadowed * binding
-    ;; and binding of +)
-    (define * +)
-    (define-values (<-y y) ((D+ (λ (x) (* x x))) 10))
-    (check-equal? y 20)
-    (check-exn
-     exn:fail?
-     (λ () (<-y 1))))
+  ;; (test-case "Primitive binding"
+  ;;   ;; Backpropagator determined via binding, so this won't work (* is
+  ;;   ;; now a new, unknown binding, unrelated to the shadowed * binding
+  ;;   ;; and binding of +)
+  ;;   (define * +)
+  ;;   (define-values (<-y y) ((D+ (λ (x) (* x x))) 10))
+  ;;   (check-equal? y 20)
+  ;;   (check-exn
+  ;;    exn:fail?
+  ;;    (λ () (<-y 1))))
 
   (test-case "match-let"
     (define Df (D+ (λ (x) (match-let ([(list a b) x]) (+ a b)))))
@@ -294,6 +456,7 @@
     (check-equal? y 3)
     (check-equal? (<-y 1) '((1 1))))
 
+  ;; TODO: investigate this
   (test-case "second derivative"
     (check-not-exn
      (λ ()
@@ -317,16 +480,25 @@
   ;;
   )
 
+;((D+ (λ (z) (call-with-values (λ () z) identity))) 1)
+
+;; inline definition of composition (works)
+;((backprop ((D+ (λ (x p q) (let ([f (λ (y) (+ (* y y) p))] [g (λ (z) (* q z))] [o (λ (a b) (λ (v) (a (b v))))]) ((o f g) x)))) 10 20 30)) 1)
+
+;; anf-apply works too (problem matching apply?)
+((backprop ((D+ (λ (x y) (anf-apply + y x))) '(5 7) 10)) 1)
+
 
 ;; TODO
-
-;; tidy up/refactor sum-destructuring-lazy-letrec and use of it
 
 ;; error messages (macros/syntax)
 
 ;; more backpropagators
 
 ;; example with repeated use of D+
+;;   - Breaks at the moment
+
+;; More examples with multiple values
 
 ;; trick for defining additional primitives nicely/extensibly
 ;; perhaps both:
@@ -336,10 +508,6 @@
 
 ;; cosmetics for D+:
 ;;   - explicit closure variables can be passed by user
-
-;; multiple values:
-;;   - support in let-bindings and return from functions
-;;   - use to return closure variables to avoid destructuring operations
 
 ;; begin/begin0 as (let () ...) (?); multiple let body forms
 

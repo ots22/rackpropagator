@@ -6,7 +6,7 @@
 
 ; (require "closure.rkt")
 
-(provide gen-zero
+(provide (rename-out [make-zero gen-zero])
          gen-zero?
          ; zero
          coerce-zero
@@ -22,19 +22,20 @@
     [(procedure? a) null]
     [else 0.0]))
 
-(struct gen-zero ())
+(struct gen-zero ()
+  #:constructor-name make-zero)
 
 ;; Walk a, and if it contains a gen-zero, coerce this to have a
 ;; conforming shape to b
-;; 
+;;
 ;; coerce-zero : pair? pair? -> pair?
 
 ;; TODO better error message for non-conforming a and b
 (define (coerce-zero a b)
   (cond
     [(gen-zero? a) (zero b)]
-    [(pair? a) (cons (coerce-zero (car a) (car b))
-                     (coerce-zero (cdr a) (cdr b)))]
+    [(pair? a) (cons (coerce-zero (car a) (if (procedure? b) b (car b)))
+                     (coerce-zero (cdr a) (if (procedure? b) b (cdr b))))]
     [else a]))
 
 (define (zero-car a)
