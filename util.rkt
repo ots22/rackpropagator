@@ -106,7 +106,7 @@
      (list a b c)))
 
   (check-exn
-   exn:fail:contract:variable?
+   exn:fail?
    (λ ()
      (convert-compile-time-error
       (sum-let* ([a 1]
