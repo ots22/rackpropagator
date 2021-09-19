@@ -8,28 +8,15 @@
          syntax/parse
          "util.rkt")
 
-(provide (rename-out [anf3-convention anf-convention]
-                     [anf3-val anf-val]
-                     [anf3-binding-expr anf-binding-expr]
-                     [anf3-expr anf-expr]
-                     [anf3? anf?]
-                     [anf3-normalize anf-normalize]))
+(provide anf-convention
+         (rename-out [anf2-val anf-val]
+                     [anf2-binding-expr anf-binding-expr]
+                     [anf2-expr anf-expr]
+                     [anf2? anf?]
+                     [anf2-normalize anf-normalize]))
 
 (module+ test
   (require rackunit))
-
-;; ----------------------------------------
-
-;; combining-letrec is a placeholder identifier for the output of
-;; anf1/anf2, and should not appear in the final transformed output,
-;; of anf3
-(module combining-letrec-mod racket
-  (provide combining-letrec)
-  (define-syntax (combining-letrec stx)
-    (raise-syntax-error #f "invalid syntax" stx)))
-
-(require (for-template 'combining-letrec-mod)
-         'combining-letrec-mod)
 
 ;; ----------------------------------------
 ;; Conventions and syntax classes
@@ -42,10 +29,6 @@
   (pattern (x:id ...+ . xs:id)
            #:attr vars #'(x ... xs)))
 
-(define-syntax-class let-id
-  #:literal-sets (kernel-literals)
-  (pattern {~or* let-values letrec-values combining-letrec}))
-
 (define-syntax-class anf-const
   (pattern a:boolean)
   (pattern a:number)
@@ -54,7 +37,6 @@
 (define-conventions anf1+2-convention
   [#rx"^x" id]
   [formals lambda-formals]
-  [let-or-letrec let-id]
 
   [c anf-const]
 
@@ -62,18 +44,18 @@
   [#rx"^M" anf1-expr]
 
   [#rx"^W" anf2-val]
+  [#rx"^B" anf2-binding-expr]
   [#rx"^S" anf2-expr])
 
-(define-conventions anf3-convention
+(define-conventions anf-convention
   [#rx"^x" id]
   [formals lambda-formals]
-  [let-or-letrec let-id]
 
   [c anf-const]
 
-  [#rx"^V" anf3-val]
-  [#rx"^B" anf3-binding-expr]
-  [#rx"^M" anf3-expr])
+  [#rx"^V" anf2-val]
+  [#rx"^B" anf2-binding-expr]
+  [#rx"^M" anf2-expr])
 
 ;; ----------------------------------------
 ;; A-normal form, first kind (ANF1)
@@ -89,11 +71,10 @@
 (define-syntax-class anf1-expr
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
-  #:literals (combining-letrec)
   (pattern V0) ; return
   (pattern (#%plain-app V0 V ...)) ; tail call
-  (pattern (combining-letrec (((x) V0)) M)) ; bind
-  (pattern (combining-letrec (((x) (#%plain-app V0 V ...))) M)) ; call
+  (pattern (let-values (((x) V0)) M)) ; bind
+  (pattern (let-values (((x) (#%plain-app V0 V ...))) M)) ; call
   (pattern (if V0 M-true M-false))) ; branch
 
 (define anf1? (syntax-class->predicate anf1-expr))
@@ -114,45 +95,22 @@
   (pattern x)
   (pattern (#%plain-lambda formals S)))
 
-(define-syntax-class anf2-expr
+(define-syntax-class anf2-binding-expr
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
-  (pattern x)
-  (pattern (combining-letrec (((x) W)) S))
-  (pattern (combining-letrec (((x) (#%plain-app x0 xs ...))) S))
-  (pattern (combining-letrec (((x) (if x-test
-                                       (#%plain-app x-true)
-                                       (#%plain-app x-false)))) S)))
-
-(define anf2? (syntax-class->predicate anf2-expr))
-
-;; ----------------------------------------
-;; A-normal form, third kind (ANF3)
-
-(define-syntax-class anf3-val
-  #:conventions (anf3-convention)
-  #:literal-sets (kernel-literals)
-  (pattern (quote e))
-  (pattern (quote-syntax e {~optional #:local}))
-  (pattern x)
-  (pattern (#%plain-lambda formals M)))
-
-(define-syntax-class anf3-binding-expr
-  #:conventions (anf3-convention)
-  #:literal-sets (kernel-literals)
-  (pattern V)
+  (pattern W)
   (pattern (#%plain-app x0 xs ...))
   (pattern (if x-test
                (#%plain-app x-true)
                (#%plain-app x-false))))
 
-(define-syntax-class anf3-expr
-  #:conventions (anf3-convention)
+(define-syntax-class anf2-expr
+  #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
   (pattern x)
-  (pattern (letrec-values (((xs) B) ...) M)))
-
-(define anf3? (syntax-class->predicate anf3-expr))
+  (pattern (let-values (((x) B)) S)))
+  
+(define anf2? (syntax-class->predicate anf2-expr))
 
 ;; ----------------------------------------
 
@@ -177,7 +135,6 @@
   (syntax-parse stx
     #:conventions (anf1+2-convention)
     #:literal-sets (kernel-literals)
-    #:literals (combining-letrec)
     [(#%expression e)
      (anf1-normalize #'e k)]
 
@@ -185,17 +142,17 @@
      #:with M (anf1-normalize #'u)
      (k #'(#%plain-lambda formals M))]
 
-    [(let-or-letrec (((x0) u1)) u2)
+    [(let-values (((x0) u1)) u2)
      #:with M2 (anf1-normalize #'u2 k)
-     (anf1-normalize #'u1 (pat-λ (r) #`(combining-letrec (((x0) r)) M2)))]
+     (anf1-normalize #'u1 (pat-λ (r) #`(let-values (((x0) r)) M2)))]
 
-    [(let-or-letrec (((x0) u1) ((xs) us) ...) u2)
-     (anf1-normalize #'(combining-letrec (((x0) u1))
-                        (combining-letrec (((xs) us) ...)
+    [(let-values (((x0) u1) ((xs) us) ...) u2)
+     (anf1-normalize #'(let-values (((x0) u1))
+                        (let-values (((xs) us) ...)
                           u2))
                     k)]
 
-    [(let-or-letrec () u1)
+    [(let-values () u1)
      (anf1-normalize #'u1 k)]
 
     [(if u1 u2 u3)
@@ -216,10 +173,9 @@
    (λ (u) (syntax-parse u
             #:conventions (anf1+2-convention)
             #:literal-sets (kernel-literals)
-            #:literals (combining-letrec)
             [V (k u)]
             [_ #:with x (generate-temporary)
-               #`(combining-letrec (((x) #,u))
+               #`(let-values (((x) #,u))
                    #,(k #'x))]))))
 
 ;; ----------------------------------------
@@ -229,43 +185,42 @@
   (syntax-parse stx
     #:conventions (anf1+2-convention)
     #:literal-sets (kernel-literals)
-    #:literals (combining-letrec)
-    [(combining-letrec (((x) V)) M)
+    [(let-values (((x) V)) M)
      #:with S (anf1->2 #'M)
      #:with W (anf2-normalize-value #'V)
-     #'(combining-letrec (((x) W)) S)]
+     #'(let-values (((x) W)) S)]
 
     [(if V M1 M2)
      #:with S1 (anf1->2 #'M1)
      #:with S2 (anf1->2 #'M2)
      #:with (x-test x-true x-false x)
             (generate-temporaries #'(x-test x-true x-false x))
-     #'(combining-letrec (((x-test) V))
-         (combining-letrec (((x-true) (#%plain-lambda () S1)))
-           (combining-letrec (((x-false) (#%plain-lambda () S2)))
-             (combining-letrec (((x) (if x-test
+     #'(let-values (((x-test) V))
+         (let-values (((x-true) (#%plain-lambda () S1)))
+           (let-values (((x-false) (#%plain-lambda () S2)))
+             (let-values (((x) (if x-test
                                          (#%plain-app x-true)
                                          (#%plain-app x-false))))
                x))))]
 
-    [(combining-letrec (((x) (#%plain-app V Vs ...))) M)
+    [(let-values (((x) (#%plain-app V Vs ...))) M)
      #:with S (anf1->2 #'M)
      (walk-with anf2-lift-value
                 #'(V Vs ...)
-                (pat-λ (r) #'(combining-letrec (((x) (#%plain-app . r)))
+                (pat-λ (r) #'(let-values (((x) (#%plain-app . r)))
                                S)))]
 
     [(#%plain-app V Vs ...)
      #:with x (generate-temporary)
      (anf1->2
-      #'(combining-letrec (((x) (#%plain-app V Vs ...)))
+      #'(let-values (((x) (#%plain-app V Vs ...)))
           x))]
 
     [x #'x]
 
     [V #:with x (generate-temporary)
        #:with W (anf2-normalize-value #'V)
-       #'(combining-letrec (((x) W)) x)]))
+       #'(let-values (((x) W)) x)]))
 
 (define (anf2-normalize-value v)
   (syntax-parse v
@@ -281,22 +236,21 @@
   (syntax-parse v
     #:conventions (anf1+2-convention)
     #:literal-sets (kernel-literals)
-    #:literals (combining-letrec)
     [x (k v)]
     [(#%plain-lambda formals M)
      #:with S (anf1->2 #'M)
      #:with t (generate-temporary)
-     #`(combining-letrec (((t) (#%plain-lambda formals S)))
+     #`(let-values (((t) (#%plain-lambda formals S)))
          #,(k #'t))]
     [(quote e)
      #:with t (generate-temporary)
      #:with v* v
-     #`(combining-letrec (((t) v*))
+     #`(let-values (((t) v*))
          #,(k #'t))]
     [(quote-syntax e {~optional #:local})
      #:with t (generate-temporary)
      #:with v* v
-     #`(combining-letrec (((t) v*))
+     #`(let-values (((t) v*))
          #,(k #'t))]
     ))
 
@@ -305,55 +259,12 @@
 
 ;; ----------------------------------------
 
-;; anf2->3 : anf2? -> anf3?
-(define (anf2->3 stx)
-  (syntax-parse stx
-    #:conventions (anf1+2-convention)
-    #:literal-sets (kernel-literals)
-    #:literals (combining-letrec)
-    [x stx]
-
-    [(quote e) stx]
-    [(quote-syntax e {~optional #:local}) stx]
-
-    [(#%plain-lambda formals S)
-     #:with u* (anf2->3 #'S)
-     #'(#%plain-lambda formals u*)]
-
-    [{~and e (#%plain-app x0 xs ...)}
-     #'e]
-
-    [{~and e (if x-test
-                 (#%plain-app x-true)
-                 (#%plain-app x-false))}
-     #'e]
-
-    [(combining-letrec (((xs) us) ...)
-      (combining-letrec (((x0) u0))
-        u1))
-     (anf2->3
-      #'(combining-letrec (((xs) us) ... ((x0) u0))
-          u1))]
-
-    [(combining-letrec (((xs) us) ...)
-        x0)
-     #:with (us* ...) (stx-map anf2->3 #'(us ...))
-     #'(letrec-values (((xs) us*) ...)
-         x0)]
-    ;;
-    ))
-
-(define (anf3-normalize stx)
-  (anf2->3 (anf2-normalize stx)))
-
-;; ----------------------------------------
-
 (module+ test
   (define-namespace-anchor ns-anchor)
   (define ns (namespace-anchor->namespace ns-anchor))
   (parameterize ([current-namespace ns])
     (test-case "anf expand"
-      (check-true  (anf1? #'(combining-letrec (((a) '1)) (#%plain-app + '1 '2))))
+      (check-true  (anf1? #'(let-values (((a) '1)) (#%plain-app + '1 '2))))
       (check-false (anf1? #'(let ((a (let ((b 1)) b))) a))))
 
     (test-case "anf normalize"
@@ -366,7 +277,7 @@
       (define u1 (expand #'(#%plain-app + (let-values (((a) '1)) a) (let-values (((a) '2)) a))))
       (define M1 (anf1-normalize u1))
       (check-true (anf1? M1))
-      (check-exn exn:fail:syntax? (λ () (eval-syntax M1) 3)))
+      (check-equal? (eval-syntax M1) 3))
 
     (test-case "anf fib"
       (define fib-stx
@@ -387,30 +298,28 @@
       (define fib-stx-anf2 (anf1->2 fib-stx-anf1))
       (check-true (anf2? fib-stx-anf2))
 
-      (define fib-stx-anf3 (anf2->3 fib-stx-anf2))
-      (check-true (anf3? fib-stx-anf3))
+      (check-equal? 10946 (eval-syntax fib-stx-anf2)))
 
-      (check-equal? 10946 (eval-syntax fib-stx-anf3)))
+    ;; TODO: letrec
+    ;; (test-case "anf fib 2"
+    ;;   (define fib-stx
+    ;;     (expand
+    ;;      #'(let ()
+    ;;         (define (fib n)
+    ;;           (if (< n 2)
+    ;;               1
+    ;;               (+ (fib (- n 1)) (fib (- n 2)))))
+    ;;         (fib 20))))
 
-    (test-case "anf fib 2"
-      (define fib-stx
-        (expand
-         #'(let ()
-            (define (fib n)
-              (if (< n 2)
-                  1
-                  (+ (fib (- n 1)) (fib (- n 2)))))
-            (fib 20))))
+    ;;   (define fib-stx-anf2 (anf2-normalize fib-stx))
 
-      (define fib-stx-anf3 (anf3-normalize fib-stx))
-
-      (check-true (anf3? fib-stx-anf3))
-      (check-equal? 10946 (eval-syntax fib-stx-anf3)))
+    ;;   (check-true (anf2? fib-stx-anf2))
+    ;;   (check-equal? 10946 (eval-syntax fib-stx-anf2)))
     
     (test-case "anf let/let*/letrec"
       (check-equal?
        (eval-syntax
-        (anf3-normalize
+        (anf2-normalize
          (expand #'(let ([x 0])
                      (let ([x 1]
                            [y x])
@@ -419,21 +328,23 @@
 
       (check-equal?
        (eval-syntax
-        (anf3-normalize
+        (anf2-normalize
          (expand #'(let ([x 0])
                      (let* ([x 1]
                             [y x])
                        (+ x y))))))
        2)
 
-      (check-equal?
-       (eval-syntax
-        (anf3-normalize
-         (expand #'(let ([x (thunk 0)]
-                         [y 0])
-                     (letrec ([x (thunk (+ y 1))]
-                              [y 1])
-                       (+ (x) y))))))
-       3))
+      ;; TODO: letrec
+      ;; (check-equal?
+      ;;  (eval-syntax
+      ;;   (anf2-normalize
+      ;;    (expand #'(let ([x (thunk 0)]
+      ;;                    [y 0])
+      ;;                (letrec ([x (thunk (+ y 1))]
+      ;;                         [y 1])
+      ;;                  (+ (x) y))))))
+      ;;  3)
+      )
     ;
     ))
