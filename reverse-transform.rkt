@@ -68,7 +68,7 @@
            #:attr result #'body))
 
 ;; Note: takes a 'let-values' style binding, and produces a binding
-;; form for sum-destructuring-letrec (sheds one level of parens around
+;; form for sum-destructuring-let (sheds one level of parens around
 ;; the id)
 (define (ϕ b bound-ids)
   (syntax-parse b
@@ -131,9 +131,10 @@
 
     [((lhs) (if x-test (#%plain-app x-true) (#%plain-app x-false)))
      #'((x-true.sensitivity x-false.sensitivity)
-        (if x-test.tagged
-            (list (car (lhs.backprop lhs.sensitivity)) (gen-zero))
-            (list (gen-zero) (car (lhs.backprop lhs.sensitivity)))))]
+        (let ([b (car (lhs.backprop lhs.sensitivity))])
+          (if x-test.tagged
+              (list b (gen-zero))
+              (list (gen-zero) b))))]
     ;;
     ))
 

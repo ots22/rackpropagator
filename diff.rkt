@@ -19,6 +19,8 @@
          "apply.rkt"
          "primitives.rkt")
 
+(provide D+)
+
 (module+ test
   (require racket/match
            syntax/macro-testing

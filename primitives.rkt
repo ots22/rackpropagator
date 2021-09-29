@@ -8,7 +8,7 @@
 
 (provide (rename-out [make-gen-zero gen-zero])
          gen-zero?
-         ; zero
+         zero
          coerce-zero
          zero-car
          zero-cdr
@@ -20,7 +20,9 @@
     [(null? a) null]
     [(pair? a) (cons (zero (car a)) (zero (cdr a)))]
     [(procedure? a) null]
-    [else 0.0]))
+    [(gen-zero? a) (make-gen-zero)]
+    [else 0.0]
+    ))
 
 (struct gen-zero ()
   #:constructor-name make-gen-zero)

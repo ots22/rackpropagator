@@ -42,6 +42,25 @@
     [(~var _ stx-class) #t]
     [_ #f]))
 
+(define-for-syntax (group-zeros grp)
+  (syntax-parse grp
+    #:literals (gen-zero)
+    [({~and p [x (gen-zero)]} ps ...)
+     #:with ((zs ...) (ps* ...)) (group-zeros #'(ps ...))
+     #'((p zs ...) (ps* ...))]
+
+    [(p ps ...)
+     #:with ((zs ...) (ps* ...)) (group-zeros #'(ps ...))
+     #'((zs ...) (p ps* ...))]
+    
+    [() #'(() ())]))
+
+(define-for-syntax (filter-zeros grp)
+  (syntax-parse (group-zeros grp)
+    [((z zs ...) ()) #'(z)]
+    [((zs ...) (ps ...+)) #'(ps ...)]))
+
+
 ;; Like let*, but repeated identifiers in the binding forms are
 ;; accumulated using the generic 'add'.  An identifier can be used in
 ;; subsequent value expressions, once the definition is complete
@@ -52,9 +71,12 @@
      #:with grouped-pairs (group-by stx-car
                                     (reverse (syntax-e #'([x v] ...)))
                                     free-identifier=?)
-     #:with (x* ...) (reverse (stx-map stx-caar #'grouped-pairs))
+
+     ;; optimization: drop constant zero terms
+     #:with grouped-pairs* (stx-map filter-zeros #'grouped-pairs)
+     #:with (x* ...) (reverse (stx-map stx-caar #'grouped-pairs*))
      #:with v*-cmpts (reverse (stx-map (λ (grp) (stx-map stx-cadr grp))
-                                       #'grouped-pairs))
+                                       #'grouped-pairs*))
      #:with (v* ...) (stx-map (λ (grp)
                                 (foldl (λ (a b) #`(add #,a #,b))
                                        (stx-car grp) (zero-cdr (syntax-e grp))))
