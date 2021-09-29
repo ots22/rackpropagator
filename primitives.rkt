@@ -6,7 +6,7 @@
 
 ; (require "closure.rkt")
 
-(provide gen-zero
+(provide (rename-out [make-gen-zero gen-zero])
          gen-zero?
          ; zero
          coerce-zero
@@ -22,7 +22,8 @@
     [(procedure? a) null]
     [else 0.0]))
 
-(struct gen-zero ())
+(struct gen-zero ()
+  #:constructor-name make-gen-zero)
 
 ;; Walk a, and if it contains a gen-zero, coerce this to have a
 ;; conforming shape to b
