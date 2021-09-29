@@ -38,16 +38,6 @@
            #:attr dummy (dummy #'x)
            #:attr tagged (tagged #'x)))
 
-(define-syntax-class nested-let-values
-  #:literal-sets (kernel-literals)
-  (pattern (let-values (B)
-             body:nested-let-values)
-           #:attr (bindings 1) (cons #'B (syntax-e #'(body.bindings ...)))
-           #:attr result #'body.result)
-  (pattern body:id
-           #:attr (bindings 1) null
-           #:attr result #'body))
-
 ;; the sensitivities are thunks (defined with destructuring-sum-lazy-letrec)
 ;; sensitivity-result produces a result of the appropriate shape, forcing each thunk
 (define-syntax-class lambda-formals/backprop-ids
@@ -66,6 +56,16 @@
            #:attr (sensitivity-vars 1) (syntax->list #'(x.sensitivity ... xs.sensitivity))
            #:attr (sensitivity-result 1) (syntax->list #'(x.sensitivity ... xs.sensitivity))
            #:attr tagged #'(x.tagged ... . xs.tagged)))
+
+(define-syntax-class nested-let-values
+  #:literal-sets (kernel-literals)
+  (pattern (let-values (B)
+             body:nested-let-values)
+           #:attr (bindings 1) (cons #'B (syntax-e #'(body.bindings ...)))
+           #:attr result #'body.result)
+  (pattern body:id
+           #:attr (bindings 1) null
+           #:attr result #'body))
 
 ;; Note: takes a 'let-values' style binding, and produces a binding
 ;; form for sum-destructuring-letrec (sheds one level of parens around
@@ -145,22 +145,27 @@
                          [formals lambda-formals/backprop-ids])
     #:literal-sets (kernel-literals)
 
-    [{~and lam (#%plain-lambda formals
-                               body:nested-let-values)}
+    [{~and lam
+           (#%plain-lambda formals
+             body:nested-let-values)}
 
      #:with (B ...) #'(body.bindings ...)
      #:with (x ...) #'(B.x ...)
+     #:with result:id/backprop-ids #'body.result
+
+     ;; free-vars returns only let/lambda bindings. These will be a
+     ;; subset of bound-ids* that are used in the lambda body
+     #:with (x-free ...) (free-vars #'lam)
+
      #:do [(define bound-ids* (append bound-ids
                                       (syntax->list #'(formals.vars ...))
                                       (syntax->list #'(x ...))))]
-     ;; Note: free-vars returns only let/lambda bindings. These will be
-     ;; a subset of bound-ids* that are used in the lambda body
 
-     #:with result:id/backprop-ids #'body.result
-     #:with (x-free ...) (free-vars #'lam)
      #:with ((primal-bindings prim ...) ...)
-            (stx-map (curryr ϕ bound-ids*) #'(B ...))
-     #:with (backprop-bindings ...) (map ρ (reverse (syntax-e #'(B ...))))
+            (map (curryr ϕ bound-ids*) (syntax-e #'(B ...)))
+     #:with (backprop-bindings ...)
+            (map ρ (reverse (syntax-e #'(B ...))))
+
      (cons
       #'(λ formals.tagged
           (destructuring-sum-let* (primal-bindings ...)
@@ -186,6 +191,3 @@
       #'(#%plain-lambda (x)
           (let-values (((result) (#%plain-app + x x)))
             result))))))
-
-
-
