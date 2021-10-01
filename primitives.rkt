@@ -8,7 +8,9 @@
 
 (provide (rename-out [make-gen-zero gen-zero]
                      [make-proc-result proc-result]
-                     [proc-result proc-result*])
+                     [proc-result proc-result*]
+                     [proc-result-primal0 primal]
+                     [proc-result-backprop0 backprop])
          gen-zero?
          zero
          coerce-zero

@@ -97,8 +97,8 @@
      #:with tmp (generate-temporary)
      (cons
       #'(tmp e)
-      (append (explode-binding #'(x (proc-result-primal tmp)))
-              (explode-binding #'(y (proc-result-backprop tmp)))))]
+      (append (explode-binding #'(x (primal tmp)))
+              (explode-binding #'(y (backprop tmp)))))]
 
     [(x:id e) (list b)]
 

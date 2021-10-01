@@ -80,7 +80,7 @@
                                   (scale Aw -1)
                                   (cons Aw (make-list (sub1 (length xs))
                                                       (scale Aw -1))))))))]
-    
+
     ;; TODO fix signature
     [*
      #'(λ (x y)
@@ -105,20 +105,18 @@
     [proc-result
      #'(λ (p b)
          (proc-result (proc-result p b)
-                      (λ (Aw) (list '()
-                                    (proc-result-primal Aw)
-                                    (proc-result-backprop Aw)))))]
+                      (λ (Aw) (list '() (primal Aw) (backprop Aw)))))]
 
-    [proc-result-primal
+    [primal
      #'(λ (r)
-         (proc-result (proc-result-primal r)
+         (proc-result (primal r)
                       (λ (Aw) (list '() (proc-result Aw (gen-zero))))))]
 
-    [proc-result-backprop
+    [backprop
      #'(λ (r)
-         (proc-result (proc-result-backprop r)
+         (proc-result (backprop r)
                       (λ (Aw) (list '() (proc-result (gen-zero) Aw)))))]
-    
+
     [car0
      #'(λ (xs)
          (proc-result (car0 xs)
@@ -172,8 +170,8 @@
     [apply
      #'(λ (f . args)
          (let* ([p+b (apply apply f args)]
-                [p (proc-result-primal p+b)]
-                [b (proc-result-backprop p+b)])
+                [p (primal p+b)]
+                [b (backprop p+b)])
            (proc-result p
                         (λ Aw
                           (let* ([^f+args (apply b Aw)]
@@ -210,7 +208,7 @@
                      (proc-result
                       (coerce-zero a b)
                       (λ (Aw) (list '() Aw (gen-zero)))))]
-    
+
     [other #'(if (procedure? other)
                  (unknown-backprop 'other)
                  other)]
@@ -222,8 +220,8 @@
 ;; (define-syntax-rule (backprop De)
 ;;   (let-values ([(p b) De]) b))
 
-(define primal proc-result-primal)
-(define backprop proc-result-backprop)
+;(define primal proc-result-primal)
+;(define backprop proc-result-backprop)
 
 (define-syntax (D+ stx)
   (syntax-parse stx
@@ -242,11 +240,11 @@
            (λ xs
              (let ([primal+backprop (apply D+f xs)])
                (proc-result
-                (proc-result-primal primal+backprop)
+                (primal primal+backprop)
                 (λ Aw
                   (coerce-zero
                    ;; drop terms from closed-over variables
-                   (cdr (apply (proc-result-backprop primal+backprop) Aw))
+                   (cdr (apply (backprop primal+backprop) Aw))
                    xs)))))))]))
 
 (module+ test
@@ -387,7 +385,7 @@
 
   (test-case "Second derivative"
     (check-equal?
-     ((proc-result-backprop ((D+ (λ (y) ((proc-result-backprop ((D+ (λ (x) (* x x))) y)) 1.0))) 5.0)) '(1.0))
+     ((backprop ((D+ (λ (y) ((backprop ((D+ (λ (x) (* x x))) y)) 1.0))) 5.0)) '(1.0))
      '(2.0)))
 
   ;; This will no longer work: expansion includes a function that has
