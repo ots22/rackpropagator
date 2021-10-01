@@ -436,10 +436,6 @@
 
 ;; error messages (macros/syntax)
 
-;; more backpropagators
-
-;; example with repeated use of D+
-
 ;; trick for defining additional primitives nicely/extensibly
 ;; perhaps both:
 ;;   - register-backprop
@@ -454,3 +450,9 @@
 ;;   - uses of 'box' create something in the adjoint table (representing
 ;;     the internal state - or something like that)
 ;;   - convert uses of set! into set-box!
+
+;; letrec (via set!/set-box!)
+
+;; 'tags' in proc-result (?)
+
+;; multiple forms in let body
