@@ -55,12 +55,12 @@
                 gen-zero
                 coerce-zero
                 proc-result
-                proc-result-primal
-                proc-result-backprop
                 primal
                 backprop
                 >
-                =)
+                =
+                equal?
+                map)
     [+
      #'(λ xs
          (proc-result (apply + xs)
@@ -173,14 +173,34 @@
                 [p (primal p+b)]
                 [b (backprop p+b)])
            (proc-result p
-                        (λ Aw
-                          (let* ([^f+args (apply b Aw)]
+                        (λ (Aw)
+                          (let* ([^f+args (b Aw)]
                                  [^f (car ^f+args)]
                                  [^args (cdr ^f+args)]
                                  [n-1 (sub1 (length args))]
                                  [head (take ^args n-1)]
                                  [tail (drop ^args n-1)])
                             (list* '() ^f (append head (list tail))))))))]
+
+    [map
+     #'(λ (f . xs)
+         (let* ([p+bs (apply map f xs)]
+                [ps (map primal p+bs)]
+                [bs (map backprop p+bs)])
+           (proc-result
+            ps
+            (λ (Aws)
+              (let* ([^f+xs (map (λ (b Aw) (b Aw)) bs Aws)]
+                     [^fs (map car ^f+xs)]
+                     ;; list with same length as each element of xs
+                     [^xs (map cdr ^f+xs)]
+                     ;; 'transpose': list of same length as xs
+                     [^xs* (apply map list ^xs)]
+                     [^f (foldl add (gen-zero) ^fs)])
+                (list* '() ^f ^xs*))))))]
+
+    ;; TODO
+    ;; foldl
 
     [make-list
      #'(λ (n x)
@@ -200,6 +220,13 @@
           (apply = xs)
           (λ (Aw)
             (cons '() (make-list (length xs) (gen-zero))))))]
+
+    [equal?
+     #'(λ (a b)
+         (proc-result
+          (equal? a b)
+          (λ (Aw)
+            (cons '() (list (gen-zero) (gen-zero))))))]
 
     [gen-zero #'(λ () (proc-result (gen-zero)
                                    (λ (Aw) (list '()))))]
@@ -374,8 +401,13 @@
 
     (check-equal?
      ((backprop ((D+ (λ (x . xs) (car xs))) 2.0 3.0 4.0)) 1.0)
-     '(0.0 1.0 0.0))
-    )
+     '(0.0 1.0 0.0)))
+
+  (test-case "map"
+    (let ([result ((D+ (λ (xs ys) (map * xs ys))) '(1 2 3) '(4 5 6))])
+      (check-equal? (primal result) '(4 10 18))
+      (check-equal? ((backprop result) '(-1.0 1.0 0.5))
+                    '((-4.0 5.0 3.0) (-1.0 2.0 1.5)))))
 
   (test-case "Primitive binding"
     (define * +)
