@@ -79,7 +79,7 @@
                                        #'grouped-pairs*))
      #:with (v* ...) (stx-map (λ (grp)
                                 (foldl (λ (a b) #`(add #,a #,b))
-                                       (stx-car grp) (zero-cdr (syntax-e grp))))
+                                       (stx-car grp) (cdr0 (syntax-e grp))))
                               #'v*-cmpts)
      #'(let* ([x* v*] ...) body ...)]))
 
@@ -90,14 +90,24 @@
 ;; explode-bindings : syntax? -> (listof syntax?)
 (define-for-syntax (explode-binding b)
   (syntax-parse b
+    #:literals (proc-result)
     [(() _) null]
+
+    [((proc-result x y) e)
+     #:with tmp (generate-temporary)
+     (cons
+      #'(tmp e)
+      (append (explode-binding #'(x (proc-result-primal tmp)))
+              (explode-binding #'(y (proc-result-backprop tmp)))))]
+
     [(x:id e) (list b)]
+
     [((x . xs) e)
      #:with tmp (generate-temporary)
      (cons
       #'(tmp e)
-      (append (explode-binding #'(x (zero-car tmp)))
-              (explode-binding #'(xs (zero-cdr tmp)))))]))
+      (append (explode-binding #'(x (car0 tmp)))
+              (explode-binding #'(xs (cdr0 tmp)))))]))
 
 ;; Similar to match-let with a nested list pattern, but using sum-let
 (define-syntax (destructuring-sum-let* stx)

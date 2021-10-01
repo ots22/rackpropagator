@@ -45,8 +45,8 @@
                 cadr
                 unsafe-car
                 unsafe-cdr
-                zero-car
-                zero-cdr
+                car0
+                cdr0
                 list
                 list*
                 identity
@@ -54,87 +54,109 @@
                 make-list
                 gen-zero
                 coerce-zero
+                proc-result
+                proc-result-primal
+                proc-result-backprop
+                primal
+                backprop
                 >
                 =)
     [+
      #'(λ xs
-         (list (apply + xs)
-               (λ (Aw) (cons '() (make-list (length xs) Aw)))))]
+         (proc-result (apply + xs)
+                      (λ (Aw) (cons '() (make-list (length xs) Aw)))))]
 
     [add
      #'(λ xs
-         (list (apply add xs)
-               (λ (Aw) (cons '() (make-list (length xs) Aw)))))]
+         (proc-result (apply add xs)
+                      (λ (Aw) (cons '() (make-list (length xs) Aw)))))]
 
     [-
      #'(λ xs
-         (list (apply - xs)
-               (λ (Aw)
-                 (cons '()
-                       (if (= (length xs) 1)
-                           (scale Aw -1)
-                           (cons Aw (make-list (sub1 (length xs))
-                                               (scale Aw -1))))))))]
-
+         (proc-result (apply - xs)
+                      (λ (Aw)
+                        (cons '()
+                              (if (= (length xs) 1)
+                                  (scale Aw -1)
+                                  (cons Aw (make-list (sub1 (length xs))
+                                                      (scale Aw -1))))))))]
+    
     ;; TODO fix signature
     [*
      #'(λ (x y)
-         (list (* x y)
-               (λ (Aw) (list '() (scale Aw y) (scale Aw x)))))]
+         (proc-result (* x y)
+                      (λ (Aw) (list '() (scale Aw y) (scale Aw x)))))]
 
     [scale
      #'(λ (v a)
-         (list (scale v a)
-               (λ (Aw) (list '() (scale Aw a) (scale v Aw)))))]
+         (proc-result (scale v a)
+                      (λ (Aw) (list '() (scale Aw a) (scale v Aw)))))]
 
     [cons
      #'(λ (a b)
-         (list (cons a b)
-               (λ (Aw) (list '() (zero-car Aw) (zero-cdr Aw)))))]
+         (proc-result (cons a b)
+                      (λ (Aw) (list '() (car0 Aw) (cdr0 Aw)))))]
 
     [car
      #'(λ (xs)
-         (list (car xs)
-               (λ (Aw) (list '() (cons Aw (gen-zero))))))]
+         (proc-result (car xs)
+                      (λ (Aw) (list '() (cons Aw (gen-zero))))))]
 
-    [zero-car
+    [proc-result
+     #'(λ (p b)
+         (proc-result (proc-result p b)
+                      (λ (Aw) (list '()
+                                    (proc-result-primal Aw)
+                                    (proc-result-backprop Aw)))))]
+
+    [proc-result-primal
+     #'(λ (r)
+         (proc-result (proc-result-primal r)
+                      (λ (Aw) (list '() (proc-result Aw (gen-zero))))))]
+
+    [proc-result-backprop
+     #'(λ (r)
+         (proc-result (proc-result-backprop r)
+                      (λ (Aw) (list '() (proc-result (gen-zero) Aw)))))]
+    
+    [car0
      #'(λ (xs)
-         (list (zero-car xs)
-               (λ (Aw) (list '() (cons Aw (gen-zero))))))]
+         (proc-result (car0 xs)
+                      (λ (Aw) (list '() (cons Aw (gen-zero))))))]
 
     [cdr
      #'(λ (xs)
-         (list (cdr xs)
-               (λ (Aw) (list '() (cons (gen-zero) Aw)))))]
+         (proc-result (cdr xs)
+                      (λ (Aw) (list '() (cons (gen-zero) Aw)))))]
 
-    [zero-cdr
+    [cdr0
      #'(λ (xs)
-         (list (zero-cdr xs)
-               (λ (Aw) (list '() (cons (gen-zero) Aw)))))]
+         (proc-result (cdr0 xs)
+                      (λ (Aw) (list '() (cons (gen-zero) Aw)))))]
 
     [cadr
      #'(λ (xs)
-         (list (cadr xs)
-               (λ (Aw) (list '() (cons (gen-zero) (cons Aw (gen-zero)))))))]
+         (proc-result (cadr xs)
+                      (λ (Aw) (list '() (cons (gen-zero) (cons Aw (gen-zero)))))))]
 
     [unsafe-car
      #'(λ (xs)
-         (list (unsafe-car xs)
-               (λ (Aw) (list '() (cons Aw (gen-zero))))))]
+         (proc-result (unsafe-car xs)
+                      (λ (Aw) (list '() (cons Aw (gen-zero))))))]
     [unsafe-cdr
      #'(λ (xs)
-         (list (unsafe-cdr xs)
-               (λ (Aw) (list '() (cons (gen-zero) Aw)))))]
+         (proc-result (unsafe-cdr xs)
+                      (λ (Aw) (list '() (cons (gen-zero) Aw)))))]
 
     [list
      #'(λ xs
-         (list xs
-               (λ (Aw) (cons '() Aw))))]
+         (proc-result xs
+                      (λ (Aw) (cons '() Aw))))]
 
     ;; TODO fix (no multiple values/split-at)
     [list*
      #'(λ xs
-         (list
+         (proc-result
           (apply list* xs)
           (λ (Aw)
             (cons '()
@@ -144,52 +166,51 @@
 
     [identity
      #'(λ (x)
-         (list x
-               (λ (Aw) (list '() Aw))))]
+         (proc-result x
+                      (λ (Aw) (list '() Aw))))]
 
     [apply
      #'(λ (f . args)
          (let* ([p+b (apply apply f args)]
-                [p (car p+b)]
-                [b (cadr p+b)])
-           (list p
-                 (λ Aw
-                   (let* ([^f+args (apply b Aw)]
-                          [^f (car ^f+args)]
-                          [^args (cdr ^f+args)]
-                          [n-1 (sub1 (length args))]
-                          [head (take ^args n-1)]
-                          [tail (drop ^args n-1)])
-                     (list* '() ^f (append head (list tail))))))))]
+                [p (proc-result-primal p+b)]
+                [b (proc-result-backprop p+b)])
+           (proc-result p
+                        (λ Aw
+                          (let* ([^f+args (apply b Aw)]
+                                 [^f (car ^f+args)]
+                                 [^args (cdr ^f+args)]
+                                 [n-1 (sub1 (length args))]
+                                 [head (take ^args n-1)]
+                                 [tail (drop ^args n-1)])
+                            (list* '() ^f (append head (list tail))))))))]
 
     [make-list
      #'(λ (n x)
-         (list (make-list n x)
-               (λ (Aw) (list '() 0 (apply add Aw)))))]
+         (proc-result (make-list n x)
+                      (λ (Aw) (list '() 0 (apply add Aw)))))]
 
     [>
      #'(λ xs
-         (list
+         (proc-result
           (apply > xs)
           (λ (Aw)
             (cons '() (make-list (length xs) (gen-zero))))))]
 
     [=
      #'(λ xs
-         (list
+         (proc-result
           (apply = xs)
           (λ (Aw)
             (cons '() (make-list (length xs) (gen-zero))))))]
 
-    [gen-zero #'(λ () (list (gen-zero)
-                            (λ (Aw) (list '()))))]
+    [gen-zero #'(λ () (proc-result (gen-zero)
+                                   (λ (Aw) (list '()))))]
 
     [coerce-zero #'(λ (a b)
-                     (list
+                     (proc-result
                       (coerce-zero a b)
                       (λ (Aw) (list '() Aw (gen-zero)))))]
-
-
+    
     [other #'(if (procedure? other)
                  (unknown-backprop 'other)
                  other)]
@@ -201,8 +222,8 @@
 ;; (define-syntax-rule (backprop De)
 ;;   (let-values ([(p b) De]) b))
 
-(define primal car)
-(define backprop cadr)
+(define primal proc-result-primal)
+(define backprop proc-result-backprop)
 
 (define-syntax (D+ stx)
   (syntax-parse stx
@@ -220,12 +241,13 @@
          (let ([D+f De*])
            (λ xs
              (let ([primal+backprop (apply D+f xs)])
-               (list (car primal+backprop)
-                     (λ Aw
-                       (coerce-zero
-                        ;; drop terms from closed-over variables
-                        (cdr (apply (cadr primal+backprop) Aw))
-                        xs)))))))]))
+               (proc-result
+                (proc-result-primal primal+backprop)
+                (λ Aw
+                  (coerce-zero
+                   ;; drop terms from closed-over variables
+                   (cdr (apply (proc-result-backprop primal+backprop) Aw))
+                   xs)))))))]))
 
 (module+ test
   (test-case "plus"
@@ -254,14 +276,14 @@
                             (((λ (b)
                                 (λ (c)
                                   b)) a) 1)))]
-                 [(list y <-y) (D+f 184.0)])
+                 [(proc-result* y <-y) (D+f 184.0)])
       (check-equal? y 184.0)
       (check-equal? (<-y 1.0) '(1.0))))
 
   (test-case "conditional"
     (match-let* ([D+f (D+ (λ (a) (if (> a 10) a 0.0)))]
-                 [(list primal1 backprop1) (D+f 5.0)]
-                 [(list primal2 backprop2) (D+f 15.0)])
+                 [(proc-result* primal1 backprop1) (D+f 5.0)]
+                 [(proc-result* primal2 backprop2) (D+f 15.0)])
       (check-equal? primal1 0.0)
       (check-equal? primal2 15.0)
       (check-equal? (backprop1 1.0) '(0.0))
@@ -365,7 +387,7 @@
 
   (test-case "Second derivative"
     (check-equal?
-     ((cadr ((D+ (λ (y) ((cadr ((D+ (λ (x) (* x x))) y)) 1.0))) 5.0)) '(1.0))
+     ((proc-result-backprop ((D+ (λ (y) ((proc-result-backprop ((D+ (λ (x) (* x x))) y)) 1.0))) 5.0)) '(1.0))
      '(2.0)))
 
   ;; This will no longer work: expansion includes a function that has

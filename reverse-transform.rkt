@@ -100,11 +100,11 @@
              (set->list
               (set-subtract (immutable-free-id-set (syntax-e #'(x0 xs ...)))
                             (immutable-free-id-set bound-ids))))]
-     (cons #'((lhs.tagged lhs.backprop) (x0.tagged xs.tagged ...))
+     (cons #'((proc-result lhs.tagged lhs.backprop) (x0.tagged xs.tagged ...))
            prims)]
 
     [((lhs) (if x-test (#%plain-app x-true) (#%plain-app x-false)))
-     (list #'((lhs.tagged lhs.backprop)
+     (list #'((proc-result lhs.tagged lhs.backprop)
               (if x-test.tagged (x-true.tagged) (x-false.tagged))))]
     ;
     ))
@@ -170,7 +170,7 @@
      (cons
       #'(λ formals.tagged
           (destructuring-sum-let* (primal-bindings ...)
-            (list
+            (proc-result
              result.tagged
              (λ (result.dummy)
                (destructuring-sum-let*

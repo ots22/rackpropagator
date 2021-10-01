@@ -6,12 +6,14 @@
 
 ; (require "closure.rkt")
 
-(provide (rename-out [make-gen-zero gen-zero])
+(provide (rename-out [make-gen-zero gen-zero]
+                     [make-proc-result proc-result]
+                     [proc-result proc-result*])
          gen-zero?
          zero
          coerce-zero
-         zero-car
-         zero-cdr
+         car0
+         cdr0
          add
          scale)
 
@@ -19,10 +21,15 @@
   (cond
     [(null? a) null]
     [(pair? a) (cons (zero (car a)) (zero (cdr a)))]
-    [(procedure? a) null]
+    [(proc-result? a) (make-proc-result (zero (proc-result-primal0 a))
+                                        (zero (proc-result-backprop0 a)))]
     [(gen-zero? a) (make-gen-zero)]
     [else 0.0]
     ))
+
+(define ((lift-zero f) x) (if (gen-zero? x)
+                              (make-gen-zero)
+                              (f x)))
 
 (struct gen-zero ()
   #:constructor-name make-gen-zero)
@@ -38,17 +45,15 @@
     [(gen-zero? a) (zero b)]
     [(pair? a) (cons (coerce-zero (car a) (car b))
                      (coerce-zero (cdr a) (cdr b)))]
+    [(proc-result? a)
+     (make-proc-result
+      (coerce-zero (proc-result-primal0 a) (proc-result-primal0 b))
+      (coerce-zero (proc-result-backprop0 a) (proc-result-backprop0 b)))]
+
     [else a]))
 
-(define (zero-car a)
-  (if (gen-zero? a)
-      a
-      (car a)))
-
-(define (zero-cdr a)
-  (if (gen-zero? a)
-      a
-      (cdr a)))
+(define (car0 a) ((lift-zero car) a))
+(define (cdr0 a) ((lift-zero cdr) a))
 
 ;; (define (zero? a)
 ;;   (equal? a (zero a)))
@@ -60,9 +65,22 @@
     [(and (null? a) (null? b)) null]
     [(pair? a) (cons (add (car a) (car b))
                      (add (cdr a) (cdr b)))]
+
+    [(proc-result? a)
+     (make-proc-result
+      (add (proc-result-primal0 a) (proc-result-primal0 b))
+      (add (proc-result-backprop0 a) (proc-result-backprop0 b)))]
+      
     [else (+ a b)]))
 
 (define (scale a b)
   (cond
     [(gen-zero? a) a]
     [else (* a b)]))
+
+(struct proc-result (primal backprop)
+  #:transparent
+  #:constructor-name make-proc-result)
+
+(define (proc-result-primal0 x) ((lift-zero proc-result-primal) x))
+(define (proc-result-backprop0 x) ((lift-zero proc-result-backprop) x))
