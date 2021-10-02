@@ -566,14 +566,19 @@
 ;; cosmetics for D+:
 ;;   - explicit closure variables can be passed by user
 
-;; set! (and functions that mutate)
-;;   - global table of adjoints (of values - set-box! rather than set!)
-;;   - uses of 'box' create something in the adjoint table (representing
-;;     the internal state - or something like that)
-;;   - convert uses of set! into set-box!
-
-;; letrec (via set!/set-box!)
+;; anf:
+;;   - convert uses of set! to set-box!
+;;   - letrec (via set!/set-box!)
 
 ;; 'tags' in proc-result (?)
 
 ;; multiple forms in let body
+
+;; handle unknown forms: expand to an application that recursively
+;; strips proc-result, and backpropagator that only works with (gen-zero)
+
+;; 'lists' passed to backpropagators might have a tail of (gen-zero) (== null)
+;;   - make sure this case is handled
+;;   - other cases like this?
+
+
