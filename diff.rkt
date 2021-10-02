@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (for-syntax (except-in racket/base apply)
+(require (for-syntax (except-in racket/base
+                                apply unbox)
                      racket/list
                      racket/function
                      racket/syntax
@@ -11,13 +12,15 @@
                      "apply.rkt"
                      "anf.rkt"
                      "reverse-transform.rkt"
-                     "primitives.rkt"
+                     (rename-in "primitives.rkt"
+                                [unbox0 unbox])
                      "util.rkt")
          racket/list
          racket/function
          racket/unsafe/ops
          "apply.rkt"
-         "primitives.rkt")
+         (rename-in "primitives.rkt"
+                    [unbox0 unbox]))
 
 (provide D+)
 
@@ -31,12 +34,20 @@
                          "Backpropagator unknown"
                          "op" op))
 
-(define-for-syntax (prim-definition prim)
+(define (strip-backprop p)
+  (cond
+    [(procedure? p)
+     (λ xs (strip-backprop (apply p (map strip-backprop xs))))]
+    [(proc-result? p) (primal p)]
+    [else p]))
+
+(define-for-syntax (prim-definition box-adjoints prim)
   (syntax-parse prim
     #:literals (+
                 -
                 *
                 /
+                sub1
                 add
                 scale
                 cons
@@ -59,8 +70,13 @@
                 backprop
                 >
                 =
+                length
                 equal?
-                map)
+                map
+                make-hasheq
+                box
+                unbox
+                set-box!)
     [+
      #'(λ xs
          (proc-result (apply + xs)
@@ -86,6 +102,12 @@
      #'(λ (x y)
          (proc-result (* x y)
                       (λ (Aw) (list '() (scale Aw y) (scale Aw x)))))]
+
+    [sub1
+     #'(λ (x)
+         (proc-result
+          (sub1 x)
+          (λ (Aw) (list '() 1.0))))]
 
     [scale
      #'(λ (v a)
@@ -221,6 +243,13 @@
           (λ (Aw)
             (cons '() (make-list (length xs) (gen-zero))))))]
 
+    [length
+     #'(λ (lst)
+         (proc-result
+          (length lst)
+          (λ (Aw)
+            (list '() (gen-zero)))))]
+
     [equal?
      #'(λ (a b)
          (proc-result
@@ -228,27 +257,71 @@
           (λ (Aw)
             (cons '() (list (gen-zero) (gen-zero))))))]
 
-    [gen-zero #'(λ () (proc-result (gen-zero)
-                                   (λ (Aw) (list '()))))]
+    [gen-zero
+     #'(λ () (proc-result (gen-zero)
+                          (λ (Aw) (list '()))))]
 
-    [coerce-zero #'(λ (a b)
-                     (proc-result
-                      (coerce-zero a b)
-                      (λ (Aw) (list '() Aw (gen-zero)))))]
+    [coerce-zero
+     #'(λ (a b)
+         (proc-result
+          (coerce-zero a b)
+          (λ (Aw) (list '() Aw (gen-zero)))))]
 
-    [other #'(if (procedure? other)
-                 (unknown-backprop 'other)
-                 other)]
+    [make-hasheq
+     #'(λ ()
+         (proc-result
+          (make-hasheq)
+          (λ (Aw) (list '()))))]
+
+    ;; TODO: handle gen-zero values passed when a box was expected
+    ;; e.g. (unbox (gen-zero))  -> (gen-zero)
+    ;; (add box1 box2) (?)
+    [box
+     #'(λ (x)
+         (let* ([b (box x)]
+                [__ (hash-set! box-adjoints b (box (gen-zero)))])
+         (proc-result
+          b
+          (λ (Aw-ignore)
+            (let* ([Ab (hash-ref box-adjoints b)]
+                   [Ax (unbox Ab)]
+                   [__ (set-box! Ab (gen-zero))])
+              (list '() Ax))))))]
+
+    [unbox
+     #'(λ (b)
+         (proc-result
+          (unbox b)
+          (λ (Aw)
+            (let* ([Ab (hash-ref box-adjoints b)]
+                   [__ (set-box! Ab (add (unbox Ab) Aw))]
+                   )
+              (list '() (gen-zero))))))]
+
+    [set-box!
+     #'(λ (b x)
+         (proc-result
+          (set-box! b x)
+          (λ (Aw-void)
+            (let* ([Ab (hash-ref box-adjoints b)]
+                   [Ax (unbox Ab)]
+                   [__ (set-box! Ab (gen-zero))])
+              (list '() (gen-zero) Ax)))))]
+
+    ;; [other #'(if (procedure? other)
+    ;;              (unknown-backprop 'other)
+    ;;              other)]
+
+    [other
+     #'(λ xs
+         (proc-result
+          (apply (strip-backprop other) xs)
+          (λ (Aw)
+            (if (gen-zero? Aw)
+                Aw
+                (unknown-backprop 'other)))))]
+
     ))
-
-;; (define-syntax-rule (primal De)
-;;   (let-values ([(p b) De]) p))
-
-;; (define-syntax-rule (backprop De)
-;;   (let-values ([(p b) De]) b))
-
-;(define primal proc-result-primal)
-;(define backprop proc-result-backprop)
 
 (define-syntax (D+ stx)
   (syntax-parse stx
@@ -261,8 +334,12 @@
              (anf-normalize (local-expand #'e 'expression '())))]
      #:with (_ (((_) e*)) _) (local-expand simplified-e 'expression '())
      #:with (De* (prim:id prim-intro:id) ...) (reverse-transform #'e*)
-     #:with (prim-def ...) (stx-map prim-definition #'(prim ...))
-     #'(let* ([prim-intro prim-def] ...)
+     #:with (prim-def ...) (stx-map (curry prim-definition #'box-adjoints)
+                                    #'(prim ...))
+     ;; let* needed here because there may be duplicates in prim (TODO
+     ;; filter these out)
+     #'(let* ([box-adjoints (make-hasheq)]
+              [prim-intro prim-def] ...)
          (let ([D+f De*])
            (λ xs
              (let ([primal+backprop (apply D+f xs)])
@@ -413,21 +490,65 @@
     (define * +)
     (check-exn
      exn:fail?
-     (λ () (D+ (λ (x) (* x x))))))
+     (λ () ((backprop ((D+ (λ (x) (* x x))) 1.0)) 1.0))))
 
   (test-case "Second derivative"
     (check-equal?
      ((backprop ((D+ (λ (y) ((backprop ((D+ (λ (x) (* x x))) y)) 1.0))) 5.0)) '(1.0))
-     '(2.0)))
+     '(2.0))
+
+    (check-equal?
+     ((backprop ((D+ (λ (y) ((backprop ((D+ (λ (x) (if (> x 0) (* x x) (- x x)))) y)) 1.0))) 5.0)) '(1.0))
+     '(2.0))
+
+    )
+
+  (test-case "boxes"
+
+    (check-equal?
+     ((backprop ((D+ (λ (x)
+                       (let* ([b (box (* x x))]
+                              [__ (set-box! b (* (unbox b) (unbox b)))])
+                         (unbox b)))) 3.0)) 1.0)
+     '(108.0))
+
+
+    (check-equal?
+     ((backprop ((D+ (λ (x) (unbox (box x)))) 2.0)) 1.0)
+     '(1.0))
+
+    ;; boxes are handled specially -- the following might be unexpected!
+    (check-equal?
+     ((backprop ((D+ (λ (x) (box x))) 5.0)) (box 1.0))
+     '(0.0))
+
+    ;; the input sensitivity is completely ignored, in fact
+    (check-equal?
+     ((backprop ((D+ (λ (x) (box x))) 5.0)) 'ignored)
+     '(0.0))
+
+    (check-equal?
+     ((backprop ((D+ (λ (x)
+                       (let ([w (box x)])
+                         (define (f y) (set-box! w (* (unbox w) y)))
+                         (let* ([__ (f x)]
+                                [__ (f x)])
+                           (unbox w))))) 2)) 1)
+     '(12))
+
+
+    ;
+    )
+
 
   ;; This will no longer work: expansion includes a function that has
   ;; an unknown backpropagator
   ;;
-  ;; (test-case "match-let"
-  ;;   (define Df (D+ (λ (x) (match-let ([(list a b) x]) (+ a b)))))
-  ;;   (match-define (list y <-y) (Df '(1 2)))
-  ;;   (check-equal? y 3)
-  ;;   (check-equal? (<-y 1) '((1 1))))
+  (test-case "match-let"
+    (define Df (D+ (λ (x) (match-let ([(list a b) x]) (+ a b)))))
+    (match-define (proc-result* y <-y) (Df '(1 2)))
+    (check-equal? y 3)
+    (check-equal? (<-y 1) '((1 1))))
 
   ;;
   )
