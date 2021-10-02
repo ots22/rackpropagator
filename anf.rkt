@@ -78,7 +78,8 @@
   (pattern (#%plain-app V0 V ...)) ; tail call
   (pattern (let-values (((x) V0)) M)) ; bind
   (pattern (let-values (((x) (#%plain-app V0 V ...))) M)) ; call
-  (pattern (if V0 M-true M-false))) ; branch
+  (pattern (if V0 M-true M-false))
+  (pattern (let-values (((x) (if V0 M-true M-false))) M))) ; branch
 
 (define anf1? (syntax-class->predicate anf1-expr))
 
@@ -111,7 +112,7 @@
   #:literal-sets (kernel-literals)
   (pattern x)
   (pattern (let-values (B) S)))
-  
+
 (define anf2? (syntax-class->predicate anf2-expr))
 
 ;; ----------------------------------------
@@ -146,7 +147,7 @@
 
     [(let-values (((x0) u1)) u2)
      #:with M2 (anf1-normalize #'u2 k)
-     (anf1-normalize #'u1 (pat-λ (r) #`(let-values (((x0) r)) M2)))]
+     (anf1-normalize #'u1 (pat-λ (r) #'(let-values (((x0) r)) M2)))]
 
     [(let-values (((x0) u1) ((xs) us) ...) u2)
      (anf1-normalize #'(let-values (((x0) u1))
@@ -158,9 +159,9 @@
      (anf1-normalize #'u1 k)]
 
     [(if u1 u2 u3)
-     #:with M2 (k (anf1-normalize #'u2))
-     #:with M3 (k (anf1-normalize #'u3))
-     (anf1-normalize-name #'u1 (pat-λ (t) #'(if t M2 M3)))]
+     #:with M2 (anf1-normalize #'u2)
+     #:with M3 (anf1-normalize #'u3)
+     (anf1-normalize-name #'u1 (pat-λ (t) (k #'(if t M2 M3))))]
 
     [(#%plain-app u us ...)
      (walk-with anf1-normalize-name
@@ -201,8 +202,8 @@
          (let-values (((x-true) (#%plain-lambda () S1)))
            (let-values (((x-false) (#%plain-lambda () S2)))
              (let-values (((x) (if x-test
-                                         (#%plain-app x-true)
-                                         (#%plain-app x-false))))
+                                   (#%plain-app x-true)
+                                   (#%plain-app x-false))))
                x))))]
 
     [(let-values (((x) (#%plain-app V Vs ...))) M)
@@ -211,6 +212,18 @@
                 #'(V Vs ...)
                 (pat-λ (r) #'(let-values (((x) (#%plain-app . r)))
                                S)))]
+
+    [(let-values (((x) (if V M1 M2))) M)
+     #:with S (anf1->2 #'M)
+     #:with S1 (anf1->2 #'M1)
+     #:with S2 (anf1->2 #'M2)
+     #'(let-values (((x-test) V))
+         (let-values (((x-true) (#%plain-lambda () S1)))
+           (let-values (((x-false) (#%plain-lambda () S2)))
+             (let-values (((x) (if x-test
+                                   (#%plain-app x-true)
+                                   (#%plain-app x-false))))
+               S))))]
 
     [(#%plain-app V Vs ...)
      #:with x (generate-temporary)
@@ -311,7 +324,7 @@
 
     ;;   (check-true (anf2? fib-stx-anf2))
     ;;   (check-equal? 10946 (eval-syntax fib-stx-anf2)))
-    
+
     (test-case "anf let/let*/letrec"
       (check-equal?
        (eval-syntax
@@ -342,5 +355,15 @@
       ;;                  (+ (x) y))))))
       ;;  3)
       )
+
+    (test-case "if"
+      (check-not-exn
+       (λ ()
+         (anf2-normalize
+          (expand #'(let ((a (if #t (list (list)) #f))) a))))
+       ))
+
     ;
     ))
+
+;(anf1-normalize (expand #'(let ((a (if #t (list (list)) #f))) a)))
