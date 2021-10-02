@@ -11,11 +11,13 @@
                      [proc-result proc-result*]
                      [proc-result-primal0 primal]
                      [proc-result-backprop0 backprop])
+         proc-result?
          gen-zero?
          zero
          coerce-zero
          car0
          cdr0
+         unbox0
          add
          scale)
 
@@ -57,6 +59,8 @@
 (define (car0 a) ((lift-zero car) a))
 (define (cdr0 a) ((lift-zero cdr) a))
 
+(define (unbox0 a) ((lift-zero unbox) a))
+
 ;; (define (zero? a)
 ;;   (equal? a (zero a)))
 
@@ -67,7 +71,6 @@
     [(and (null? a) (null? b)) null]
     [(pair? a) (cons (add (car a) (car b))
                      (add (cdr a) (cdr b)))]
-
     [(proc-result? a)
      (make-proc-result
       (add (proc-result-primal0 a) (proc-result-primal0 b))
