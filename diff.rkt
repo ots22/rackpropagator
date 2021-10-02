@@ -41,6 +41,11 @@
     [(proc-result? p) (primal p)]
     [else p]))
 
+(define (foldl0 f x0 xs)
+  (if (or (null? xs) (gen-zero? xs))
+      x0
+      (foldl0 f (f x0 (car xs)) (cdr xs))))
+
 (define-for-syntax (prim-definition box-adjoints prim)
   (syntax-parse prim
     #:literals (+
@@ -218,7 +223,7 @@
                      [^xs (map cdr ^f+xs)]
                      ;; 'transpose': list of same length as xs
                      [^xs* (apply map list ^xs)]
-                     [^f (foldl add (gen-zero) ^fs)])
+                     [^f (foldl0 add (gen-zero) ^fs)])
                 (list* '() ^f ^xs*))))))]
 
     ;; TODO
@@ -227,7 +232,8 @@
     [make-list
      #'(λ (n x)
          (proc-result (make-list n x)
-                      (λ (Aw) (list '() 0 (apply add Aw)))))]
+                      (λ (Aw)
+                        (list '() 0 (foldl0 add (gen-zero) Aw)))))]
 
     [>
      #'(λ xs
