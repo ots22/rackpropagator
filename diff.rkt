@@ -578,13 +578,7 @@
 
 ;; 'tags' in proc-result (?)
 
-;; multiple forms in let body
-
-;; handle unknown forms: expand to an application that recursively
-;; strips proc-result, and backpropagator that only works with (gen-zero)
-
 ;; 'lists' passed to backpropagators might have a tail of (gen-zero) (== null)
 ;;   - make sure this case is handled
 ;;   - other cases like this?
-
 
