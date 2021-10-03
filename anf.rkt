@@ -44,13 +44,13 @@
 
   [c anf-simple-literal]
 
-  [#rx"^V" anf1-val]
-  [#rx"^C" anf1-cexpr]
-  [#rx"^M" anf1-expr]
+  [#rx"^V(.*[^*])?$" anf1-val]
+  [C anf1-cexpr]
+  [#rx"^M(.*[^*])?$" anf1-expr]
 
-  [#rx"^W" anf2-val]
-  [#rx"^B" anf2-binding-expr]
-  [#rx"^S" anf2-expr])
+  [#rx"^V(.*[^*])?[*]$" anf2-val]
+  [#rx"^B(.*[^*])?[*]$" anf2-binding-expr]
+  [#rx"^M(.*[^*])?[*]$" anf2-expr])
 
 (define-conventions anf-convention
   [#rx"^x" id]
@@ -65,6 +65,7 @@
 ;; ----------------------------------------
 ;; A-normal form, first kind (ANF1)
 
+;; V
 (define-syntax-class anf1-val
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
@@ -72,6 +73,7 @@
   (pattern x)
   (pattern (#%plain-lambda formals M)))
 
+;; C
 (define-syntax-class anf1-cexpr
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
@@ -80,6 +82,7 @@
   (pattern (if V0 M-true M-false))
   (pattern (set! x V)))
 
+;; M
 (define-syntax-class anf1-expr
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
@@ -96,28 +99,31 @@
 ;;  - all function applications are mode in a let-values binding (no tail calls)
 ;;  - function applications involve named variables only
 
+;; V*
 (define-syntax-class anf2-val
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
   (pattern c)
   (pattern x)
-  (pattern (#%plain-lambda formals S)))
+  (pattern (#%plain-lambda formals M*)))
 
+;; B*
 (define-syntax-class anf2-binding-expr
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
-  (pattern ((x) {~and v W}))
+  (pattern ((x) {~and v V*}))
   (pattern ((x) {~and v (#%plain-app x0 xs ...)}))
   (pattern ((x) {~and v (if x-test
                             (#%plain-app x-true)
                             (#%plain-app x-false))}))
-  (pattern ((x) {~and v (set! x1 W)})))
+  (pattern ((x) {~and v (set! x1 V*)})))
 
+;; M*
 (define-syntax-class anf2-expr
   #:conventions (anf1+2-convention)
   #:literal-sets (kernel-literals)
   (pattern x)
-  (pattern (let-values (B) S)))
+  (pattern (let-values (B*) M*)))
 
 (define anf2? (syntax-class->predicate anf2-expr))
 
@@ -225,46 +231,46 @@
     #:conventions (anf1+2-convention)
     #:literal-sets (kernel-literals)
     [(let-values (((x) V)) M)
-     #:with S (anf1->2 #'M)
-     #:with W (anf2-normalize-value #'V)
-     #'(let-values (((x) W)) S)]
+     #:with M* (anf1->2 #'M)
+     #:with V* (anf2-normalize-value #'V)
+     #'(let-values (((x) V*)) M*)]
 
     [(if V M1 M2)
-     #:with S1 (anf1->2 #'M1)
-     #:with S2 (anf1->2 #'M2)
+     #:with M1* (anf1->2 #'M1)
+     #:with M2* (anf1->2 #'M2)
      #:with (x-test x-true x-false x)
             (generate-temporaries #'(x-test x-true x-false x))
      #'(let-values (((x-test) V))
-         (let-values (((x-true) (#%plain-lambda () S1)))
-           (let-values (((x-false) (#%plain-lambda () S2)))
+         (let-values (((x-true) (#%plain-lambda () M1*)))
+           (let-values (((x-false) (#%plain-lambda () M2*)))
              (let-values (((x) (if x-test
                                    (#%plain-app x-true)
                                    (#%plain-app x-false))))
                x))))]
 
     [(let-values (((x) (#%plain-app V Vs ...))) M)
-     #:with S (anf1->2 #'M)
+     #:with M* (anf1->2 #'M)
      (walk-with anf2-lift-value
                 #'(V Vs ...)
                 (pat-λ (r) #'(let-values (((x) (#%plain-app . r)))
-                               S)))]
+                               M*)))]
 
     [(let-values (((x) (if V M1 M2))) M)
-     #:with S (anf1->2 #'M)
-     #:with S1 (anf1->2 #'M1)
-     #:with S2 (anf1->2 #'M2)
+     #:with M* (anf1->2 #'M)
+     #:with M1* (anf1->2 #'M1)
+     #:with M2* (anf1->2 #'M2)
      #'(let-values (((x-test) V))
-         (let-values (((x-true) (#%plain-lambda () S1)))
-           (let-values (((x-false) (#%plain-lambda () S2)))
+         (let-values (((x-true) (#%plain-lambda () M1*)))
+           (let-values (((x-false) (#%plain-lambda () M2*)))
              (let-values (((x) (if x-test
                                    (#%plain-app x-true)
                                    (#%plain-app x-false))))
-               S))))]
+               M*))))]
 
     [(let-values (((x-void) (set! x V))) M)
-     #:with S (anf1->2 #'M)
-     #:with W (anf2-normalize-value #'V)
-     #'(let-values (((x-void) (set! x W))) S)]
+     #:with M* (anf1->2 #'M)
+     #:with V* (anf2-normalize-value #'V)
+     #'(let-values (((x-void) (set! x V*))) M*)]
 
     [(#%plain-app V Vs ...)
      #:with x (generate-temporary)
@@ -281,18 +287,18 @@
     [x #'x]
 
     [V #:with x (generate-temporary)
-       #:with W (anf2-normalize-value #'V)
-       #'(let-values (((x) W)) x)]))
+       #:with V* (anf2-normalize-value #'V)
+       #'(let-values (((x) V*)) x)]))
 
 (define (anf2-normalize-value v)
   (syntax-parse v
     #:conventions (anf1+2-convention)
     #:literal-sets (kernel-literals)
     [(#%plain-lambda formals M)
-     #:with S (anf1->2 #'M)
-     #'(#%plain-lambda formals S)]
+     #:with M* (anf1->2 #'M)
+     #'(#%plain-lambda formals M*)]
 
-    [W #'W]))
+    [V* #'V*]))
 
 (define (anf2-lift-value v k)
   (syntax-parse v
@@ -300,10 +306,10 @@
     #:literal-sets (kernel-literals)
     [x (k v)]
     [(#%plain-lambda formals M)
-     #:with S (anf1->2 #'M)
+     #:with M* (anf1->2 #'M)
      #:with t (generate-temporary)
      #:with body (k #'t)
-     #'(let-values (((t) (#%plain-lambda formals S)))
+     #'(let-values (((t) (#%plain-lambda formals M*)))
          body)]
     [c
      #:with t (generate-temporary)
