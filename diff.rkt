@@ -409,6 +409,18 @@
     (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
                   '(12.0 0.0)))
 
+  (test-case "pow (box)"
+    (define D+pow
+      (D+ (λ (x n)
+            (let ([f (box '())])
+              (set-box! f (λ (x n)
+                            (if (= n 0)
+                                1.0
+                                (* x ((unbox f) x (- n 1))))))
+              ((unbox f) x n)))))
+    (check-equal? (primal (D+pow 2.0 3)) 8.0)
+    (check-equal? ((backprop (D+pow 2.0 3)) 1.0)
+                  '(12.0 0.0)))
 
   ;; TODO letrec
   ;; (test-case "pow"
@@ -574,7 +586,6 @@
 
 ;; anf:
 ;;   - convert uses of set! to set-box!
-;;   - letrec (via set!/set-box!)
 
 ;; 'tags' in proc-result (?)
 
