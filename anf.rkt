@@ -4,8 +4,10 @@
          (for-syntax racket/base)
          racket/function
          racket/syntax
+         racket/set
          syntax/stx
          syntax/parse
+         syntax/id-set
          "util.rkt")
 
 (provide anf-convention
@@ -320,6 +322,100 @@
 
 (define (anf2-normalize stx)
   (anf1->2 (anf1-normalize stx)))
+
+;; ----------------------------------------
+
+(define (set!-target-ids stx)
+  (syntax-parse stx
+    #:conventions (anf-convention)
+    #:literal-sets (kernel-literals)
+
+    [(let-values (((x) (#%plain-lambda formals M1))) M2)
+     (set-union (set!-target-ids #'M1)
+                (set!-target-ids #'M2))]
+
+    [(let-values (((x) (set! x1 V))) M)
+     (set-add (set!-target-ids #'M) #'x1)]
+
+    ;; remaining let-values cases
+    [(let-values (B) M)
+     (set!-target-ids #'M)]
+
+    [x (immutable-free-id-set)]))
+
+(define (set!->set-box! stx targets)
+
+  (define (target-unbox id)
+    (if (set-member? targets id)
+        #`(#%plain-app unbox #,id)
+        id))
+
+  (define (target-box-value id v)
+    (if (set-member? targets id)
+        #`(#%plain-app box #,v)
+        v))
+
+  (syntax-parse stx
+    #:conventions (anf-convention)
+    #:literal-sets (kernel-literals)
+
+    [x (target-unbox #'x)]
+
+    [(let-values (((x) c)) M)
+     #:with -M (set!->set-box! #'M targets)
+     #:with -c (target-box-value #'x #'c)
+     #'(let-values (((x) -c)) -M)]
+
+    [(let-values (((x) x1)) M)
+     #:with -M (set!->set-box! #'M targets)
+     #:with -x1 (target-box-value #'x (target-unbox #'x1))
+     #'(let-values (((x) -x1)) -M)]
+
+    [(let-values (((x) (#%plain-lambda formals M1))) M2)
+     #:with -M1 (set!->set-box! #'M1 targets)
+     #:with -M2 (set!->set-box! #'M2 targets)
+     #:with lam (target-box-value #'x #'(#%plain-lambda formals -M1))
+     #'(let-values (((x) lam)) -M2)]
+
+    [(let-values (((x) (#%plain-app x0 xs ...))) M)
+     #:with -M (set!->set-box! #'M targets)
+     #:with (-x0 -xs ...) (stx-map target-unbox #'(x0 xs ...))
+     #:with app (target-box-value #'x #'(#%plain-app -x0 -xs ...))
+     #'(let-values (((x) app)) -M)]
+
+    [(let-values (((x) (if x-test
+                           (#%plain-app x-true)
+                           (#%plain-app x-false))))
+       M)
+     #:with -M (set!->set-box! #'M targets)
+     #:with (-x-test -x-true -x-false)
+     (stx-map target-unbox #'(x-test x-true x-false))
+     #:with branch (target-box-value #'x #'(if -x-test
+                                               (#%plain-app -x-true)
+                                               (#%plain-app -x-false)))
+     #'(let-values (((x) branch)) -M)]
+
+    [(let-values (((x) (set! x1 c))) M)
+     #:with -M (set!->set-box! #'M targets)
+     #:with st (target-box-value #'x #'(#%plain-app set-box! x1 c))
+     #'(let-values (((x) st)) -M)]
+
+    [(let-values (((x) (set! x1 x2))) M)
+     #:with -M (set!->set-box! #'M targets)
+     #:with -x2 (target-unbox #'x2)
+     #:with st (target-box-value #'x #'(#%plain-app set-box! x1 -x2))
+     #'(let-values (((x) st)) -M)]
+
+    [(let-values (((x) (set! x1 (#%plain-lambda formals M1)))) M2)
+     #:with -M1 (set!->set-box! #'M1 targets)
+     #:with -M2 (set!->set-box! #'M2 targets)
+     #:with st (target-box-value
+                #'x
+                #'(#%plain-app set-box! x1 (#%plain-lambda formals -M1)))
+     #'(let-values (((x) st)) -M2)]
+
+    ))
+
 
 ;; ----------------------------------------
 
