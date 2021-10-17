@@ -46,13 +46,15 @@
 
   [c anf-simple-literal]
 
+  ;; e.g. V, but not V*
   [#rx"^V(.*[^*])?$" anf1-val]
-  [C anf1-cexpr]
   [#rx"^M(.*[^*])?$" anf1-expr]
+  [C anf1-cexpr]
 
+  ;; e.g V*, M2*
   [#rx"^V(.*[^*])?[*]$" anf2-val]
-  [#rx"^B(.*[^*])?[*]$" anf2-binding-expr]
-  [#rx"^M(.*[^*])?[*]$" anf2-expr])
+  [#rx"^M(.*[^*])?[*]$" anf2-expr]
+  [#rx"^B(.*[^*])?[*]$" anf2-binding-expr])
 
 (define-conventions anf-convention
   [#rx"^x" id]
