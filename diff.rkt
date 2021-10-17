@@ -335,15 +335,16 @@
   (syntax-parse stx
     #:literal-sets (kernel-literals)
     [(_ e)
-     ;;; Currently need to 'expand' here twice. The anf routines work
-     ;;; with expanded programs, but also introduce identifiers, which
-     ;;; might not be picked up by free-vars unless we expand again.
-     #:do [(define simplified-e
-             (anf-normalize (local-expand #'e 'expression '())))]
-     #:with (_ (((_) e*)) _) (local-expand simplified-e 'expression '())
+     #:with e-anf (set!->set-box!
+                   (anf-normalize (local-expand #'e 'expression '())))
+
+     #:with (let-values (((x-result-arg) e*)) x-result-final) #'e-anf
+     #:fail-unless (free-identifier=? #'x-result-arg #'x-result-final)
+                   "Result of anf-normalize had an unexpected form"
+
      #:with (De* (prim:id prim-intro:id) ...) (reverse-transform #'e*)
-     #:with (prim-def ...) (stx-map (curry prim-definition #'box-adjoints)
-                                    #'(prim ...))
+     #:with (prim-def ...)
+            (stx-map (curry prim-definition #'box-adjoints) #'(prim ...))
      ;; let* needed here because there may be duplicates in prim (TODO
      ;; filter these out)
      #'(let* ([box-adjoints (make-hasheq)]
@@ -424,55 +425,51 @@
     (check-equal? ((backprop (D+pow 2.0 3)) 1.0)
                   '(12.0 0.0)))
 
-  ;; TODO letrec
-  ;; (test-case "pow"
-  ;;   (define D+pow
-  ;;     (D+ (λ (x n)
-  ;;           (define (pow x n) (if (= n 0) 1.0 (* x (pow x (- n 1)))))
-  ;;           (pow x n))))
+  (test-case "pow"
+    (define D+pow
+      (D+ (λ (x n)
+            (define (pow x n) (if (= n 0) 1.0 (* x (pow x (- n 1)))))
+            (pow x n))))
 
-  ;;   (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
-  ;;                 '(12.0 0.0)))
+    (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
+                  '(12.0 0.0)))
 
-  ;; TODO letrec
-  ;; (test-case "pow 2"
-  ;;   (define D+pow
-  ;;     (D+ (λ (x n)
-  ;;           (define (pow x n r) (if (= n 0) r (pow x (- n 1) (* r x))))
-  ;;           (pow x n 1))))
+  (test-case "pow 2"
+    (define D+pow
+      (D+ (λ (x n)
+            (define (pow x n r) (if (= n 0) r (pow x (- n 1) (* r x))))
+            (pow x n 1))))
 
-  ;;   (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
-  ;;                 '(12.0 0.0)))
+    (check-equal? ((backprop (D+pow 2.0 3.0)) 1.0)
+                  '(12.0 0.0)))
 
-  ;; TODO letrec
-  ;; (test-case "scale gen-zero"
-  ;;   (define D+pow
-  ;;     (D+ (λ (x)
-  ;;           ;; f accumulates a result into r, but do not use it. Check
-  ;;           ;; that the backpropagator can handle scaling by the
-  ;;           ;; resulting gen-zero sensitivity.
-  ;;           (define (f x r) (if (< x 0) 1 (f (- x 1) (* r x))))
-  ;;           (f x 1))))
+  (test-case "scale gen-zero"
+    (define D+pow
+      (D+ (λ (x)
+            ;; f accumulates a result into r, but do not use it. Check
+            ;; that the backpropagator can handle scaling by the
+            ;; resulting gen-zero sensitivity.
+            (define (f x r) (if (< x 0) 1 (f (- x 1) (* r x))))
+            (f x 1))))
 
-  ;;   (check-equal? ((backprop (D+pow 2.0)) 1.0)
-  ;;                 '(0.0)))
+    (check-equal? ((backprop (D+pow 2.0)) 1.0)
+                  '(0.0)))
 
-  ;; TODO letrec
-  ;; (test-case "Mutual recursion"
-  ;;   (define D+fn
-  ;;     (D+
-  ;;      (λ (x n)
-  ;;        (letrec ([f (λ (x n) (if (= n 0)
-  ;;                                 x
-  ;;                                 (* x (g x (- n 1)))))]
-  ;;                 [g (λ (x n) (if (= n 0)
-  ;;                                 x
-  ;;                                 (+ x (f x (- n 1)))))])
-  ;;          (f x n)))))
+  (test-case "Mutual recursion"
+    (define D+fn
+      (D+
+       (λ (x n)
+         (letrec ([f (λ (x n) (if (= n 0)
+                                  x
+                                  (* x (g x (- n 1)))))]
+                  [g (λ (x n) (if (= n 0)
+                                  x
+                                  (+ x (f x (- n 1)))))])
+           (f x n)))))
 
-  ;;   (let-values ([(y <-y) (D+fn 5 5)])
-  ;;     (check-equal? y 775)
-  ;;     (check-equal? (<-y 1.0) '(585.0 0.0))))
+    (match-let ([(proc-result* y <-y) (D+fn 5 5)])
+      (check-equal? y 775)
+      (check-equal? (<-y 1.0) '(585.0 0.0))))
 
   (test-case "Different final use"
     (check-equal?
@@ -519,12 +516,9 @@
 
     (check-equal?
      ((backprop ((D+ (λ (y) ((backprop ((D+ (λ (x) (if (> x 0) (* x x) (- x x)))) y)) 1.0))) 5.0)) '(1.0))
-     '(2.0))
-
-    )
+     '(2.0)))
 
   (test-case "boxes"
-
     (check-equal?
      ((backprop ((D+ (λ (x)
                        (let* ([b (box (* x x))]
@@ -556,7 +550,29 @@
                            (unbox w))))) 2)) 1)
      '(12))
 
+    (check-equal?
+     ((backprop ((D+ (λ (x n)
+                       (let ([f (box '())])
+                         (set-box! f
+                                   (λ (x n)
+                                     (if (= n 0)
+                                         1.0
+                                         (* x ((unbox f) x (- n 1))))))
+                         ((unbox f) x n)))) 2.0 3)) 1.0)
+     '(12.0 0.0))
 
+    ;; The following should expand to something similar to the example
+    ;; above
+    (check-equal?
+     ((backprop ((D+ (λ (x n)
+                       (let ([f '()])
+                         (set! f
+                               (λ (x n)
+                                 (if (= n 0)
+                                     1.0
+                                     (* x (f x (- n 1))))))
+                         (f x n)))) 2.0 3)) 1.0)
+     '(12.0 0.0))
     ;
     )
 
