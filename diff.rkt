@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (for-syntax (except-in racket/base
-                                apply unbox)
+(require (for-syntax (except-in racket/base apply)
                      racket/list
                      racket/function
                      racket/syntax
@@ -12,15 +11,13 @@
                      "apply.rkt"
                      "anf.rkt"
                      "reverse-transform.rkt"
-                     (rename-in "primitives.rkt"
-                                [unbox0 unbox])
+                     "primitives.rkt"
                      "util.rkt")
          racket/list
          racket/function
          racket/unsafe/ops
          "apply.rkt"
-         (rename-in "primitives.rkt"
-                    [unbox0 unbox]))
+         "primitives.rkt")
 
 (provide D+)
 
@@ -81,6 +78,7 @@
                 make-hasheq
                 box
                 unbox
+                unbox0
                 set-box!)
     [+
      #'(λ xs
@@ -279,9 +277,6 @@
           (make-hasheq)
           (λ (Aw) (list '()))))]
 
-    ;; TODO: handle gen-zero values passed when a box was expected
-    ;; e.g. (unbox (gen-zero))  -> (gen-zero)
-    ;; (add box1 box2) (?)
     [box
      #'(λ (x)
          (let* ([b (box x)]
@@ -300,8 +295,7 @@
           (unbox b)
           (λ (Aw)
             (let* ([Ab (hash-ref box-adjoints b)]
-                   [__ (set-box! Ab (add (unbox Ab) Aw))]
-                   )
+                   [__ (set-box! Ab (add (unbox Ab) Aw))])
               (list '() (gen-zero))))))]
 
     [set-box!
