@@ -391,6 +391,15 @@
       (check-equal? y 184.0)
       (check-equal? (<-y 1.0) '(1.0))))
 
+  (test-case "conditional-1"
+    (match-let* ([D+f (D+ (λ (a) (if #t a a)))]
+                 [(proc-result* primal1 backprop1) (D+f 5.0)]
+                 [(proc-result* primal2 backprop2) (D+f 15.0)])
+      (check-equal? primal1 5.0)
+      (check-equal? primal2 15.0)
+      (check-equal? (backprop1 1.0) '(1.0))
+      (check-equal? (backprop2 1.0) '(1.0))))
+
   (test-case "conditional"
     (match-let* ([D+f (D+ (λ (a) (if (> a 10) a 0.0)))]
                  [(proc-result* primal1 backprop1) (D+f 5.0)]
