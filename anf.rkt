@@ -215,6 +215,13 @@
                            body ... bodyn))
                      k)]
 
+    [(letrec-values (binding-forms ...) body0 body ... bodyn)
+     #:with __ (generate-temporary '__)
+     (anf1-normalize #'(letrec-values (binding-forms ...)
+                         (let-values ([(__) body0])
+                           body ... bodyn))
+                     k)]
+
     [(let-values () u1)
      (anf1-normalize #'u1 k)]
 
@@ -269,6 +276,14 @@
      #:with V* (anf2-normalize-value #'V)
      #'(let-values (((x) V*)) M*)]
 
+    ;; Handle the base case for each part of the conditional separately
+    [(if x-test (#%plain-app x-true) (#%plain-app x-false))
+     #:with x (generate-temporary #'x)
+     #'(let-values (((x) (if x-test
+                             (#%plain-app x-true)
+                             (#%plain-app x-false))))
+         x)]
+
     [(if V M1 M2)
      #:with M1* (anf1->2 #'M1)
      #:with M2* (anf1->2 #'M2)
@@ -289,10 +304,23 @@
                 (pat-λ (r) #'(let-values (((x) (#%plain-app . r)))
                                M*)))]
 
+    ;; Handle the base case for each part of the conditional separately
+    [(let-values (((x) (if x-test
+                           (#%plain-app x-true)
+                           (#%plain-app x-false))))
+       M)
+     #:with M* (anf1->2 #'M)
+     #'(let-values (((x) (if x-test
+                             (#%plain-app x-true)
+                             (#%plain-app x-false))))
+         M*)]
+
     [(let-values (((x) (if V M1 M2))) M)
      #:with M* (anf1->2 #'M)
      #:with M1* (anf1->2 #'M1)
      #:with M2* (anf1->2 #'M2)
+     #:with (x-test x-true x-false)
+            (generate-temporaries #'(x-test x-true x-false))
      #'(let-values (((x-test) V))
          (let-values (((x-true) (#%plain-lambda () M1*)))
            (let-values (((x-false) (#%plain-lambda () M2*)))
