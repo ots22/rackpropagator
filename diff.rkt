@@ -614,12 +614,18 @@
 ;; cosmetics for D+:
 ;;   - explicit closure variables can be passed by user
 
-;; anf:
-;;   - convert uses of set! to set-box!
-
-;; 'tags' in proc-result (?)
-
 ;; 'lists' passed to backpropagators might have a tail of (gen-zero) (== null)
 ;;   - make sure this case is handled
 ;;   - other cases like this?
+
+;; unbox0 needed? (test case?)
+
+;; package structure and merge
+
+;; dedup list of primitive backprop bindings
+
+;; additional backpropagators:
+;;  - foldl/foldl0
+;;  - math/array
+;;  - hash tables (second derivative of)
 
