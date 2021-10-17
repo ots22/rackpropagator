@@ -13,7 +13,6 @@
          syntax/stx
          syntax/id-table
          syntax/id-set
-         syntax/free-vars
          "anf.rkt")
 
 (provide reverse-transform)
@@ -25,6 +24,9 @@
     (λ (id)
       (let ([name (format-id #f "~a~a~a" pre id post)])
         (dict-ref! ids id (generate-temporary name))))))
+
+(define (free-vars stx)
+  (set->list (anf-free-vars stx)))
 
 (define backpropagator (id-modifier "<-" "-"))
 (define sensitivity (id-modifier "^" "-"))
