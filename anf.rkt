@@ -133,6 +133,36 @@
 
 ;; ----------------------------------------
 
+;; anf-free-vars : anf2? -> free-id-set?
+(define (anf-free-vars stx)
+  (define Set immutable-free-id-set)
+  (syntax-parse stx
+    #:conventions (anf1+2-convention)
+    #:literal-sets (kernel-literals)
+    [x (Set (list #'x))]
+
+    [c (Set '())]
+
+    [(#%plain-lambda formals M*)
+     (set-subtract (anf-free-vars #'M*)
+                   (Set (syntax-e #'formals.vars)))]
+
+    [(#%plain-app x0 xs ...)
+     (Set (syntax-e #'(x0 xs ...)))]
+
+    [(if x-test (#%plain-app x-true) (#%plain-app x-false))
+     (Set (list #'x-test #'x-true #'x-false))]
+
+    [(set! x V*)
+     (set-add (anf-free-vars #'V*) (list #'x))]
+
+    [(let-values (((x) u)) M*)
+     (set-subtract
+      (set-union (anf-free-vars #'u) (anf-free-vars #'M*))
+      (Set (list #'x)))]))
+
+;; ----------------------------------------
+
 ;; Walk stx, which must be a syntax list, calling f on each element: f
 ;; takes a syntax object and a function (the continuation); k is the
 ;; initial continuation.
