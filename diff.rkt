@@ -70,6 +70,7 @@
                 proc-result
                 primal
                 backprop
+                <
                 >
                 =
                 length
@@ -225,7 +226,7 @@
                 (list* '() ^f ^xs*))))))]
 
     ;; TODO
-    ;; foldl
+    ;; foldl/foldl0
 
     [make-list
      #'(λ (n x)
@@ -237,6 +238,13 @@
      #'(λ xs
          (proc-result
           (apply > xs)
+          (λ (Aw)
+            (cons '() (make-list (length xs) (gen-zero))))))]
+
+    [<
+     #'(λ xs
+         (proc-result
+          (apply < xs)
           (λ (Aw)
             (cons '() (make-list (length xs) (gen-zero))))))]
 
