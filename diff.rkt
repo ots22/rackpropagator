@@ -586,8 +586,11 @@
     )
 
 
-  ;; This will no longer work: expansion includes a function that has
-  ;; an unknown backpropagator
+  ;; The expansion of match-let includes a function that has an
+  ;; unknown backpropagator -- in fact, an internal binding that we
+  ;; can't easily provide one for at all.  This function is used only
+  ;; in an error path, so the following should work (thanks to
+  ;; the final case)
   ;;
   (test-case "match-let"
     (define Df (D+ (λ (x) (match-let ([(list a b) x]) (+ a b)))))
