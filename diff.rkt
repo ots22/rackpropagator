@@ -626,8 +626,6 @@
 
 ;; package structure and merge
 
-;; dedup list of primitive backprop bindings
-
 ;; additional backpropagators:
 ;;  - foldl/foldl0
 ;;  - math/array
