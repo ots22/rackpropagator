@@ -8,6 +8,7 @@
                      "primitives.rkt")
          syntax/macro-testing
          syntax/parse
+         (prefix-in p: "prim.rkt")
          "primitives.rkt")
 
 (provide all-equal?
@@ -78,7 +79,7 @@
      #:with v*-cmpts (reverse (stx-map (λ (grp) (stx-map stx-cadr grp))
                                        #'grouped-pairs*))
      #:with (v* ...) (stx-map (λ (grp)
-                                (foldl (λ (a b) #`(add #,a #,b))
+                                (foldl (λ (a b) #`(p:add #,a #,b))
                                        (stx-car grp) (cdr0 (syntax-e grp))))
                               #'v*-cmpts)
      #'(let* ([x* v*] ...) body ...)]))
@@ -97,8 +98,8 @@
      #:with tmp (generate-temporary)
      (cons
       #'(tmp e)
-      (append (explode-binding #'(x (primal tmp)))
-              (explode-binding #'(y (backprop tmp)))))]
+      (append (explode-binding #'(x (p:primal tmp)))
+              (explode-binding #'(y (p:backprop tmp)))))]
 
     [(x:id e) (list b)]
 
@@ -106,8 +107,8 @@
      #:with tmp (generate-temporary)
      (cons
       #'(tmp e)
-      (append (explode-binding #'(x (car0 tmp)))
-              (explode-binding #'(xs (cdr0 tmp)))))]))
+      (append (explode-binding #'(x (p:car0 tmp)))
+              (explode-binding #'(xs (p:cdr0 tmp)))))]))
 
 ;; Similar to match-let with a nested list pattern, but using sum-let
 (define-syntax (destructuring-sum-let* stx)

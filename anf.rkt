@@ -1,13 +1,31 @@
 #lang racket/base
 
-(require (for-template racket/base)
-         (for-syntax racket/base)
+(require (for-template (except-in racket/base
+                                  box
+                                  unbox
+                                  set-box!)
+                       (only-in "prim.rkt"
+                                box
+                                unbox
+                                set-box!))
+         (for-syntax (except-in racket/base
+                                box
+                                unbox
+                                set-box!)
+                     (only-in "prim.rkt"
+                              box
+                              unbox
+                              set-box!))
          racket/function
          racket/syntax
          racket/set
          syntax/stx
          syntax/parse
          syntax/id-set
+         (only-in "prim.rkt"
+                  box
+                  unbox
+                  set-box!)
          "util.rkt")
 
 (provide anf-convention
