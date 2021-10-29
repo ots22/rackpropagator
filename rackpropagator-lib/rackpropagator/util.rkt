@@ -5,18 +5,17 @@
                      racket/syntax
                      syntax/parse
                      syntax/stx
-                     "primitives.rkt")
+                     "builtins.rkt")
          syntax/macro-testing
          syntax/parse
-         "primitives.rkt")
+         "builtins.rkt")
 
 (provide all-equal?
          pattern-lambda
          pat-λ
          syntax-class->predicate
+         sum-let*
          destructuring-sum-let*)
-
-(module+ test (require rackunit))
 
 (define (all-equal? . xs)
   (if (null? xs)
@@ -116,45 +115,3 @@
      #:with (binding* ...)
             (apply append (stx-map explode-binding #'(binding ...)))
      #'(sum-let* (binding* ...) body ...)]))
-
-;; ----------------------------------------
-
-(module+ test
-  (check-equal?
-   (sum-let* ([a 1]
-              [b 2]
-              [c 3]
-              [a b]
-              [c b]
-              [a c])
-     (list a b c))
-
-   (let* ([a 1]
-          [b 2]
-          [c 3]
-          [a (+ a b)]
-          [c (+ c b)]
-          [a (+ a c)])
-     (list a b c)))
-
-  (check-exn
-   exn:fail?
-   (λ ()
-     (convert-compile-time-error
-      (sum-let* ([a 1]
-                 ;; can't refer to 'a' here, since its definition is not
-                 ;; complete
-                 [b a]
-                 [a 2])
-        (list a b)))))
-
-  (check-equal?
-   (destructuring-sum-let* ([(x x) '(1 1)]) x)
-   2)
-  
-  (check-equal?
-   (destructuring-sum-let* ([(a b c) '(1 2 3)]
-                            [(d e . e) '(100 500 . 500)]
-                            [((a b) c ()) (list (list d d) e)])
-     (list a b c))
-   '(101 102 1003)))

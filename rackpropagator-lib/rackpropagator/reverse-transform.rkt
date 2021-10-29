@@ -3,7 +3,7 @@
 (require (for-template racket/base
                        (only-in "util.rkt"
                                 destructuring-sum-let*)
-                       "primitives.rkt")
+                       "builtins.rkt")
          racket/list
          racket/dict
          racket/function
@@ -16,8 +16,6 @@
          "anf.rkt")
 
 (provide reverse-transform)
-
-(module+ test (require rackunit))
 
 (define (id-modifier [pre ""] [post ""])
   (let ([ids (make-free-id-table)])
@@ -40,8 +38,6 @@
            #:attr dummy (dummy #'x)
            #:attr tagged (tagged #'x)))
 
-;; the sensitivities are thunks (defined with destructuring-sum-lazy-letrec)
-;; sensitivity-result produces a result of the appropriate shape, forcing each thunk
 (define-syntax-class lambda-formals/backprop-ids
   (pattern (x:id/backprop-ids ...)
            #:attr (vars 1) (syntax->list #'(x ...))
@@ -156,8 +152,6 @@
      #:with (x ...) #'(B.x ...)
      #:with result:id/backprop-ids #'body.result
 
-     ;; free-vars returns only let/lambda bindings. These will be a
-     ;; subset of bound-ids* that are used in the lambda body
      #:with (x-free ...) (free-vars #'lam)
 
      #:do [(define bound-ids* (append bound-ids
@@ -165,9 +159,10 @@
                                       (syntax->list #'(x ...))))]
 
      #:with ((primal-bindings prim ...) ...)
-            (map (curryr ϕ bound-ids*) (syntax-e #'(B ...)))
+     (map (curryr ϕ bound-ids*) (syntax-e #'(B ...)))
+
      #:with (backprop-bindings ...)
-            (map ρ (reverse (syntax-e #'(B ...))))
+     (map ρ (reverse (syntax-e #'(B ...))))
 
      (cons
       #'(λ formals.tagged
@@ -186,11 +181,3 @@
       (syntax-e #'((prim prim.tagged) ... ...)))]
     ;;
     ))
-
-(module+ test
-  (check-not-exn
-   (λ ()
-     (reverse-transform
-      #'(#%plain-lambda (x)
-          (let-values (((result) (#%plain-app + x x)))
-            result))))))
