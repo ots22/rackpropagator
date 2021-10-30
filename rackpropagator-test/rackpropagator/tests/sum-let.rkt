@@ -3,7 +3,7 @@
 (require
  syntax/macro-testing
  rackunit
- rackpropagator/util)
+ rackpropagator/sum-let)
 
 (check-equal?
  (sum-let* ([a 1]

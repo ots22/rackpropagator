@@ -1,8 +1,7 @@
 #lang racket/base
 
 (require (for-template racket/base
-                       (only-in "util.rkt"
-                                destructuring-sum-let*)
+                       "sum-let.rkt"
                        "builtins.rkt")
          racket/list
          racket/dict
