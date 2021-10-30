@@ -1,23 +1,17 @@
 #lang racket/base
 
-(require (for-syntax (except-in racket/base apply)
+(require "apply.rkt"
+         "builtins.rkt"
+         "primitives.rkt"
+         (for-syntax (except-in racket/base apply)
                      racket/list
                      racket/function
-                     racket/syntax
                      syntax/parse
                      syntax/stx
-                     syntax/id-table
-                     syntax/free-vars
-                     "apply.rkt"
                      "anf.rkt"
-                     "reverse-transform.rkt"
+                     "apply.rkt"
                      "builtins.rkt"
-                     "util.rkt")
-         racket/list
-         racket/function
-         "apply.rkt"
-         "builtins.rkt"
-         "primitives.rkt")
+                     "reverse-transform.rkt"))
 
 (provide D+)
 
@@ -53,39 +47,3 @@
                  ;; drop terms from closed-over variables
                  (cdr (apply (backprop primal+backprop) Aw))
                  xs))))))]))
-
-
-;; TODO
-
-;; error messages (macros/syntax)
-
-;; trick for defining additional primitives nicely/extensibly
-;; perhaps both:
-;;   - register-backprop
-;;   - define/backprop (use reverse-transform/backprop,
-;;     then 'register' using the trick)
-
-;; cosmetics for D+:
-;;   - explicit closure variables can be passed by user
-
-;; 'lists' passed to backpropagators might have a tail of (gen-zero) (== null)
-;;   - make sure this case is handled
-;;   - other cases like this?
-
-;; unbox0 needed? (test case?)
-
-;; additional backpropagators:
-;;  - foldl/foldl0
-;;  - math/array
-;;  - hash tables (second derivative of)
-;;  - list* without split-at
-
-;; put define-primitive in a separate module (this is part of the interface)
-
-;; put prim definitions somewhere else (e.g. arith.rkt, base-prim.rkt, base.rkt?)
-
-;; tips for writing backpropagators (doc page)
-;;  - use scale and add instead of * and +, which will handle structured input and gen-zero
-;;  - might be passed a gen-zero: make sure that this case is handled
-;;    properly, including in e.g. tail position in a list, where it may
-;;    mean null

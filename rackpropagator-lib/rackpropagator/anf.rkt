@@ -1,14 +1,14 @@
 #lang racket/base
 
 (require (for-template racket/base)
-         (for-syntax racket/base)
          racket/function
          racket/syntax
          racket/set
          syntax/stx
          syntax/parse
          syntax/id-set
-         "util.rkt")
+         "util.rkt"
+         (for-syntax racket/base))
 
 (provide anf-convention
          anf-free-vars

@@ -1,9 +1,8 @@
 #lang racket/base
 
-(require
- syntax/macro-testing
- rackunit
- rackpropagator/sum-let)
+(require syntax/macro-testing
+         rackunit
+         rackpropagator/sum-let)
 
 (check-equal?
  (sum-let* ([a 1]

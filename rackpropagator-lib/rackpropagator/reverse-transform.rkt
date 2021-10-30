@@ -1,17 +1,15 @@
 #lang racket/base
 
 (require (for-template racket/base
-                       "sum-let.rkt"
-                       "builtins.rkt")
-         racket/list
+                       "builtins.rkt"
+                       "sum-let.rkt")
          racket/dict
          racket/function
          racket/syntax
          racket/set
-         syntax/parse
-         syntax/stx
          syntax/id-table
          syntax/id-set
+         syntax/parse
          "anf.rkt")
 
 (provide reverse-transform)

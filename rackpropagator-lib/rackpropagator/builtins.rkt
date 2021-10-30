@@ -1,10 +1,6 @@
 #lang racket/base
 
-;;
 ;; Primitives available to user code: generic zero and addition
-;;
-
-; (require "closure.rkt")
 
 (provide (rename-out [make-gen-zero gen-zero]
                      [make-proc-result proc-result]
@@ -28,8 +24,7 @@
     [(proc-result? a) (make-proc-result (zero (proc-result-primal0 a))
                                         (zero (proc-result-backprop0 a)))]
     [(gen-zero? a) (make-gen-zero)]
-    [else 0.0]
-    ))
+    [else 0.0]))
 
 (define ((lift-zero f) x) (if (gen-zero? x)
                               (make-gen-zero)

@@ -1,9 +1,9 @@
 #lang racket/base
 
-(require (for-syntax racket/base
+(require syntax/parse
+         (for-syntax racket/base
                      syntax/parse
-                     syntax/stx)
-         syntax/parse)
+                     syntax/stx))
 
 (provide all-equal?
          (for-syntax stx-caar

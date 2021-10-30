@@ -1,9 +1,12 @@
-#lang racket
+#lang racket/base
 
-(require racket/unsafe/ops
-         "builtins.rkt"
+(require racket/list
+         racket/function
+         racket/unsafe/ops
          "apply.rkt"
-         (for-syntax syntax/parse))
+         "builtins.rkt"
+         (for-syntax racket/base
+                     syntax/parse))
 
 (provide (for-syntax prim-definition))
 
