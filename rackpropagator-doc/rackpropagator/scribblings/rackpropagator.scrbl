@@ -1,5 +1,7 @@
 #lang scribble/manual
 
+@(require "common.rkt")
+
 @title{Rackpropagator: Automatic differentiation of Racket code}
 @author{Oliver Strickson}
 @defmodule[rackpropagator]
@@ -44,3 +46,18 @@ terms of existing primitives (e.g. to support a new array library, or
 mathematical function imported via ffi), or for performance reasons,
 if a particularly efficient implementation of a particular derivative
 is available.
+
+@; @include-section["ad.scrbl"]
+
+@;; perhaps section of the above...
+@; @include-section["supported-language.scrbl"]
+
+@include-section["anf.scrbl"]
+
+@; @include-section["trace.scrbl"]
+
+Racket is fun @~cite[plt-tr1].
+
+@(require "bibliography.rkt")
+
+@(generate-bibliography)
