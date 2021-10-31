@@ -5,10 +5,56 @@
          racket/unsafe/ops
          "apply.rkt"
          "builtins.rkt"
+         "prim-definition.rkt"
          (for-syntax racket/base
                      syntax/parse))
 
-(provide (for-syntax prim-definition))
+
+
+(require/backprop
+ racket/base
+ [+
+  (λ xs
+    (proc-result (apply + xs)
+                 (λ (Aw) (cons '() (make-list (length xs) Aw)))))]
+
+ [box
+  (λ (x)
+    (let* ([b (box x)]
+           [__ (hash-set! current-box-adjoints b (box (gen-zero)))])
+      (proc-result
+       b
+       (λ (Aw-ignore)
+         (let* ([Ab (hash-ref current-box-adjoints b)]
+                [Ax (unbox Ab)]
+                [__ (set-box! Ab (gen-zero))])
+           (list '() Ax))))))]
+
+ [unbox
+  (λ (b)
+    (proc-result
+     (unbox b)
+     (λ (Aw)
+       (let* ([Ab (hash-ref current-box-adjoints b)]
+              [__ (set-box! Ab (add (unbox Ab) Aw))])
+         (list '() (gen-zero))))))]
+ 
+ [set-box!
+  (λ (b x)
+    (proc-result
+     (set-box! b x)
+     (λ (Aw-void)
+       (let* ([Ab (hash-ref current-box-adjoints b)]
+              [Ax (unbox Ab)]
+              [__ (set-box! Ab (gen-zero))])
+         (list '() (gen-zero) Ax)))))])
+
+
+
+
+
+
+
 
 (define (unknown-backprop op)
   (raise-arguments-error 'prim-definition
@@ -27,7 +73,20 @@
       x0
       (foldl0 f (f x0 (car xs)) (cdr xs))))
 
-(define-for-syntax (prim-definition box-adjoints prim)
+
+
+
+
+
+
+
+
+
+
+
+
+
+(define-for-syntax (prim-definition* box-adjoints prim)
   (syntax-parse prim
     #:literals (+
                 -

@@ -1,7 +1,9 @@
 #lang racket/base
 
-(require "apply.rkt"
+(require racket/stxparam
+         "apply.rkt"
          "builtins.rkt"
+         "prim-definition.rkt"
          "primitives.rkt"
          (for-syntax (except-in racket/base apply)
                      racket/list
@@ -32,18 +34,19 @@
      (remove-duplicates (syntax-e #'((prim prim-intro) ...))
                         free-identifier=? #:key stx-car)
 
-     #:with (prim-def ...)
-     (stx-map (curry prim-definition #'box-adjoints) #'(distinct-prim ...))
+     #:with (prim-def ...) (stx-map prim-definition #'(distinct-prim ...))
 
-     #'(let* ([box-adjoints (make-hasheq)]
-              [distinct-prim-intro prim-def] ...
-              [D+f De*])
-         (λ xs
-           (let ([primal+backprop (apply D+f xs)])
-             (proc-result
-              (primal primal+backprop)
-              (λ Aw
-                (coerce-zero
-                 ;; drop terms from closed-over variables
-                 (cdr (apply (backprop primal+backprop) Aw))
-                 xs))))))]))
+     #'(let ([box-adjoints (make-hasheq)])
+         (syntax-parameterize ([current-box-adjoints
+                                (make-rename-transformer #'box-adjoints)])
+           (let ([distinct-prim-intro prim-def] ...)
+             (let ([D+f De*])
+               (λ xs
+                 (let ([primal+backprop (apply D+f xs)])
+                   (proc-result
+                    (primal primal+backprop)
+                    (λ Aw
+                      (coerce-zero
+                       ;; drop terms from closed-over variables
+                       (cdr (apply (backprop primal+backprop) Aw))
+                       xs)))))))))]))
