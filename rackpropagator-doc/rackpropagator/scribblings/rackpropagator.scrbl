@@ -54,6 +54,8 @@ is available.
 
 @include-section["anf.scrbl"]
 
+@include-section["prim-definition.scrbl"]
+
 @; @include-section["trace.scrbl"]
 
 Racket is fun @~cite[plt-tr1].
