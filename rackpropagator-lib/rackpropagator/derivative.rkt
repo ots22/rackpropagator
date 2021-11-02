@@ -17,6 +17,19 @@
 
 (provide D+)
 
+
+(define (unknown-backprop op)
+  (raise-arguments-error 'prim-definition
+                         "Backpropagator unknown"
+                         "op" op))
+
+(define (strip-backprop p)
+  (cond
+    [(procedure? p)
+     (λ xs (strip-backprop (apply p (map strip-backprop xs))))]
+    [(proc-result? p) (primal p)]
+    [else p]))
+
 (define-syntax (D+ stx)
   (syntax-parse stx
     #:literal-sets (kernel-literals)
@@ -34,11 +47,30 @@
      (remove-duplicates (syntax-e #'((prim prim-intro) ...))
                         free-identifier=? #:key stx-car)
 
-     #:with (prim-def ...) (stx-map prim-definition #'(distinct-prim ...))
+     ;; #:with non-prim-augmented #'(λ xs
+     ;;                               (proc-result
+     ;;                                (apply (strip-backprop other) xs)
+     ;;                                (λ (Aw)
+     ;;                                  (if (gen-zero? Aw)
+     ;;                                      Aw
+     ;;                                      (unknown-backprop 'other)))))
+
+     #:with (prim-def ...) #'((prim-definition distinct-prim) ...)
 
      #'(let ([box-adjoints (make-hasheq)])
          (syntax-parameterize ([current-box-adjoints
-                                (make-rename-transformer #'box-adjoints)])
+                                (make-rename-transformer #'box-adjoints)]
+                               ;; [current-non-prim-transform
+                               ;;  (syntax-parser
+                               ;;    [other
+                               ;;     #'(λ xs
+                               ;;         (proc-result
+                               ;;          (apply (strip-backprop other) xs)
+                               ;;          (λ (Aw)
+                               ;;            (if (gen-zero? Aw)
+                               ;;                Aw
+                               ;;                (unknown-backprop 'other)))))])]
+                               )
            (let ([distinct-prim-intro prim-def] ...)
              (let ([D+f De*])
                (λ xs

@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require racket/stxparam
+         (only-in "builtins.rkt" proc-result)
          (for-syntax racket/base
                      racket/dict
                      racket/provide-transform
@@ -8,21 +9,37 @@
                      syntax/id-table
                      syntax/parse))
 
-(provide backprop-out
-         require/backprop
-         current-box-adjoints
-         (for-syntax prim-definition))
+(provide current-box-adjoints
+         current-non-prim-transform
+         local-register-primitive!
+         register-primitive!
+         prim-definition
+         backprop-out
+         require/primal+backprop
+         require/backprop)
 
-(begin-for-syntax
-  (define prim-table (make-free-id-table)))
+(define-for-syntax prim-table (make-free-id-table))
 
 (define-syntax-parameter current-box-adjoints #f)
 
-(define-for-syntax (register-primitive! prim prim-augmented-def)
-  (dict-set! prim-table prim prim-augmented-def))
+(define-syntax-parameter current-non-prim-transform #f)
 
-(define-for-syntax (prim-definition a)
-  (dict-ref prim-table a))
+(define-syntax (local-register-primitive! stx)
+  (syntax-parse stx
+    [(_ prim-id prim-augmented-def)
+     (dict-set! prim-table #'prim-id #'prim-augmented-def)
+     #'(void)]))
+
+(define-syntax (register-primitive! stx)
+  (syntax-parse stx
+    [(_ prim-id)
+     #:with prim-augmented-def (dict-ref prim-table #'prim-id)
+     #'(begin-for-syntax
+         (dict-set! prim-table #'prim-id #'prim-augmented-def))]))
+
+(define-syntax (prim-definition stx)
+  (syntax-parse stx
+    [(_ a) (dict-ref prim-table #'a #'(current-non-prim-transform a))]))
 
 (define-syntax backprop-out
   (make-provide-pre-transformer
@@ -34,10 +51,14 @@
                (syntax-e #'((register-primitive! p) ...)))
           (pre-expand-export #'(combine-out p ...) modes))]))))
 
-(define-syntax (require/backprop stx)
-  (syntax-parse stx
-    [(_ path [name name-augmented-def] ...)
-     #'(begin
-         (require (only-in path name ...))
-         (begin-for-syntax
-           (register-primitive! #'name #'name-augmented-def) ...))]))
+(define-syntax-rule (require/primal+backprop path
+                                             [prim-id prim-augmented-def] ...)
+  (begin
+    (require (only-in path prim-id ...))
+    (local-register-primitive! prim-id prim-augmented-def) ...))
+
+(define-syntax-parse-rule (require/backprop path [(prim-id . xs:formals) backprop-def] ...)
+  (require/primal+backprop
+   path
+   [prim-id
+    (λ xs (proc-result (apply prim-id xs) backprop-def))] ...))
