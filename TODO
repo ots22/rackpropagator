@@ -4,9 +4,9 @@ error messages (macros/syntax)
 
 trick for defining additional primitives nicely/extensibly
 perhaps both:
-  - register-backprop
-  - define/backprop (use reverse-transform/backprop,
-    then 'register' using the trick)
+  - [X] register-backprop 
+  - [ ] define/backprop (use reverse-transform/backprop,
+        then 'register' using the trick)
 
 cosmetics for D+:
   - explicit closure variables can be passed by user
@@ -22,12 +22,11 @@ additional backpropagators:
  - math/array
  - hash tables (second derivative of)
  - list* without split-at
+ - * more than two args
 
 public/private modules
 
 put define-primitive in a separate module (this is part of the interface)
-
-put prim definitions somewhere else (e.g. arith.rkt, base-prim.rkt, base.rkt?)
 
 tips for writing backpropagators (doc page)
  - use scale and add instead of * and +, which will handle structured input and gen-zero
@@ -36,3 +35,15 @@ tips for writing backpropagators (doc page)
    mean null
 
 require/backprop/provide (see require/typed/provide) - require and re-provide
+
+generic collections `linear`
+
+math/array
+
+testing form e.g. `(check-deriv form x primal backprop)` and rewrite tests to use this
+
+example: define/deriv - get syntax then rebind to provided builtin (e.g. for defining fold)
+
+don't include free-vars in closure variable sensitivities
+
+keyword arguments (probably doesn't work) - limitation?
