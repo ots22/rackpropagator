@@ -8,13 +8,15 @@
          (for-syntax racket/base
                      syntax/parse))
 
-(define-syntax-parse-rule (check-derivative
-                           lambda-expr
-                           {~seq #:at args
-                                 {~alt
-                                  {~once {~seq #:primal primal-expected}}
-                                  {~once {~seq #:derivative deriv-expected}}
-                                  {~once {~optional {~seq #:adjoint adjoint}}}} ...} ...)
+(define-syntax-parse-rule
+  (check-derivative lambda-expr
+                    {~seq
+                     #:at args
+                     {~alt
+                      {~once {~seq #:primal primal-expected}}
+                      {~once {~seq #:derivative deriv-expected}}
+                      {~once {~optional {~seq #:adjoint adjoint}}}} ...} ...)
+
   #:with (adjoint* ...) #'({~? adjoint 1.0} ...)
   (let ([Df (D+ lambda-expr)])
     (match-let ([(proc-result* p b) (apply Df args)])
