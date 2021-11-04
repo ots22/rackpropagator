@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require racket/stxparam
+         syntax/parse/define
          (only-in "builtins.rkt" proc-result)
          (for-syntax racket/base
                      racket/dict
@@ -57,8 +58,22 @@
     (require (only-in path prim-id ...))
     (local-register-primitive! prim-id prim-augmented-def) ...))
 
-(define-syntax-parse-rule (require/backprop path [(prim-id . xs:formals) backprop-def] ...)
+(begin-for-syntax
+  (define-syntax-class prim-spec
+    (pattern (prim-id:id xs:id ...)
+             #:attr vars #'(xs ...)
+             #:attr appl #'(prim-id xs ...))
+    (pattern (prim-id:id . xs*:id)
+             #:attr vars #'xs*
+             #:attr appl #'(apply prim-id xs*))
+    (pattern (prim-id:id xs:id ...+ . xs*:id)
+             #:attr vars #'(xs ... . xs*)
+             #:attr appl #'(apply prim-id xs ... xs*))))
+
+(define-syntax-parse-rule (require/backprop
+                           path
+                           [prim-spec:prim-spec backprop-def:expr] ...)
   (require/primal+backprop
    path
-   [prim-id
-    (λ xs (proc-result (apply prim-id xs) backprop-def))] ...))
+   [prim-spec.prim-id
+    (λ prim-spec.vars (proc-result prim-spec.appl backprop-def))] ...))

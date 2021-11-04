@@ -60,16 +60,16 @@
      #'(let ([box-adjoints (make-hasheq)])
          (syntax-parameterize ([current-box-adjoints
                                 (make-rename-transformer #'box-adjoints)]
-                               ;; [current-non-prim-transform
-                               ;;  (syntax-parser
-                               ;;    [other
-                               ;;     #'(λ xs
-                               ;;         (proc-result
-                               ;;          (apply (strip-backprop other) xs)
-                               ;;          (λ (Aw)
-                               ;;            (if (gen-zero? Aw)
-                               ;;                Aw
-                               ;;                (unknown-backprop 'other)))))])]
+                               [current-non-prim-transform
+                                (syntax-parser
+                                  [(_ other)
+                                   #'(λ xs
+                                       (proc-result
+                                        (apply (strip-backprop other) xs)
+                                        (λ (Aw)
+                                          (if (gen-zero? Aw)
+                                              Aw
+                                              (unknown-backprop 'other)))))])]
                                )
            (let ([distinct-prim-intro prim-def] ...)
              (let ([D+f De*])
