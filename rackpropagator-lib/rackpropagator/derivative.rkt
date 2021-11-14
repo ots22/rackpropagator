@@ -47,30 +47,25 @@
      (remove-duplicates (syntax-e #'((prim prim-intro) ...))
                         free-identifier=? #:key stx-car)
 
-     ;; #:with non-prim-augmented #'(λ xs
-     ;;                               (proc-result
-     ;;                                (apply (strip-backprop other) xs)
-     ;;                                (λ (Aw)
-     ;;                                  (if (gen-zero? Aw)
-     ;;                                      Aw
-     ;;                                      (unknown-backprop 'other)))))
-
      #:with (prim-def ...) #'((prim-definition distinct-prim) ...)
 
      #'(let ([box-adjoints (make-hasheq)])
          (syntax-parameterize ([current-box-adjoints
                                 (make-rename-transformer #'box-adjoints)]
+
                                [current-non-prim-transform
                                 (syntax-parser
                                   [(_ other)
-                                   #'(λ xs
-                                       (proc-result
-                                        (apply (strip-backprop other) xs)
-                                        (λ (Aw)
-                                          (if (gen-zero? Aw)
-                                              Aw
-                                              (unknown-backprop 'other)))))])]
-                               )
+                                   #'(let ([other* (strip-backprop other)])
+                                       (if (procedure? other*)
+                                           (λ xs
+                                             (proc-result
+                                              (apply other* xs)
+                                              (λ (Aw)
+                                                (if (gen-zero? Aw)
+                                                    Aw
+                                                    (unknown-backprop 'other)))))
+                                           other))])])
            (let ([distinct-prim-intro prim-def] ...)
              (let ([D+f De*])
                (λ xs
