@@ -22,11 +22,7 @@ additional backpropagators:
  - math/array
  - hash tables (second derivative of)
  - list* without split-at
- - * more than two args
-
-public/private modules
-
-put define-primitive in a separate module (this is part of the interface)
+ - */multiply with more than two args
 
 tips for writing backpropagators (doc page)
  - use scale and add instead of * and +, which will handle structured input and gen-zero
