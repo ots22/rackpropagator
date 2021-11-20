@@ -1,45 +1,39 @@
 TODO
 
-error messages (macros/syntax)
+* Interface
+  - D+ (sugared, sets all the syntax parameters, filters the closure vars out)
+  - D* (plain)
+  - define/backprop
+  - grad
+  - explicit closure vars can be passed to D+/D* by the user
+  - make (D+ f) work as well as (D+ (lambda (x) (f x))) [should just look up the backpropagator for primitives]
+  - better names for the above
 
-trick for defining additional primitives nicely/extensibly
-perhaps both:
-  - [X] register-backprop 
-  - [ ] define/backprop (use reverse-transform/backprop,
-        then 'register' using the trick)
+  - Use generic collections ('linear' interface)
 
-cosmetics for D+:
-  - explicit closure variables can be passed by user
+* Robustness
+  - better error messages (macros/syntax)
+  - 'lists' passed to backpropagators might have a tail of (gen-zero) (== null)
+    - make sure this case is handled
+    - other cases like this?
+  - More tests of second derivatives
+  - Don't include free-vars in closure variable sensitivities (works, but could blow up quickly)
 
-'lists' passed to backpropagators might have a tail of (gen-zero) (== null)
-  - make sure this case is handled
-  - other cases like this?
-
-unbox0 needed? (test case?)
-
-additional backpropagators:
- - foldl/foldl0
+* Additional backpropagators
+ - foldl/foldl0 (definition with define/backprop now works)
  - math/array
  - hash tables (second derivative of)
  - list* without split-at
  - */multiply with more than two args
 
-tips for writing backpropagators (doc page)
- - use scale and add instead of * and +, which will handle structured input and gen-zero
- - might be passed a gen-zero: make sure that this case is handled
-   properly, including in e.g. tail position in a list, where it may
-   mean null
+* Documentation
+ - Tips for writing backpropagators (doc page)
+   - use scale and add instead of * and +, which will handle structured input and gen-zero
+   - might be passed a gen-zero: make sure that this case is handled
+     properly, including in e.g. tail position in a list, where it may
+     mean null
+ - Limitation: keyword arguments won't work
 
-require/backprop/provide (see require/typed/provide) - require and re-provide
 
-generic collections `linear`
 
-math/array
 
-testing form e.g. `(check-deriv form x primal backprop)` and rewrite tests to use this
-
-example: define/deriv - get syntax then rebind to provided builtin (e.g. for defining fold)
-
-don't include free-vars in closure variable sensitivities
-
-keyword arguments (probably doesn't work) - limitation?
