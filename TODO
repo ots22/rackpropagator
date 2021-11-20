@@ -1,5 +1,9 @@
 TODO
 
+* 'define' backprop bindings, instead of 'let'
+  - make this optional?
+  - how?
+
 * Interface
   - D+ (sugared, sets all the syntax parameters, filters the closure vars out)
   - D* (plain)
