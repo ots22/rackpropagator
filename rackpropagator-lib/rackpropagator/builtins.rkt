@@ -8,6 +8,8 @@
                      [proc-result-primal0 primal]
                      [proc-result-backprop0 backprop])
          proc-result?
+         strip-backprop
+         unknown-backprop
          gen-zero?
          zero
          coerce-zero
@@ -84,3 +86,15 @@
 
 (define (proc-result-primal0 x) ((lift-zero proc-result-primal) x))
 (define (proc-result-backprop0 x) ((lift-zero proc-result-backprop) x))
+
+(define (strip-backprop p)
+  (cond
+    [(procedure? p)
+     (λ xs (strip-backprop (apply p (map strip-backprop xs))))]
+    [(proc-result? p) (proc-result-primal p)]
+    [else p]))
+
+(define (unknown-backprop op)
+  (raise-arguments-error 'prim-definition
+                         "Backpropagator unknown"
+                         "op" op))

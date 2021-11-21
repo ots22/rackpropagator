@@ -273,3 +273,11 @@
       5.0))
     '(1.0))
    '(2.0)))
+
+(test-case "Prim conditional"
+  (check-derivative (λ (x) (if * x (- x)))
+                    #:at '(5.0)
+                    #:primal 5.0
+                    #:derivative '(1.0)))
+
+                    

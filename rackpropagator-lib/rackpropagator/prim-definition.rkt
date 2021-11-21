@@ -2,7 +2,7 @@
 
 (require racket/stxparam
          syntax/parse/define
-         (only-in "builtins.rkt" proc-result)
+         "builtins.rkt"
          (for-syntax racket/base
                      racket/dict
                      racket/provide-transform
@@ -17,13 +17,31 @@
          prim-definition
          backprop-out
          require/primal+backprop
-         require/backprop)
+         require/backprop
+         (for-syntax get-prim-definition
+                     set!-prim-definition))
 
 (define-for-syntax prim-table (make-free-id-table))
 
 (define-syntax-parameter current-box-adjoints #f)
 
-(define-syntax-parameter current-non-prim-transform #f)
+(define-syntax-parameter current-non-prim-transform
+  (syntax-parser
+    [(_ other)
+     ;; #'(let ([other* (strip-backprop other)])
+     ;;     (if (procedure? other*)
+     ;;         (λ xs
+     ;;           (proc-result
+     ;;            (apply other* xs)
+     ;;            (λ (Aw)
+     ;;              (if (gen-zero? Aw)
+     ;;                  Aw
+     ;;                  (unknown-backprop 'other)))))
+     ;;         other))
+
+     #'(λ xs (proc-result (apply other xs) (λ (Aw) (if (gen-zero? Aw) Aw (unknown-backprop 'other)))))
+     
+     ]))
 
 (define-syntax (local-register-primitive! stx)
   (syntax-parse stx
@@ -31,12 +49,18 @@
      (dict-set! prim-table #'prim-id #'prim-augmented-def)
      #'(void)]))
 
+(define-for-syntax (set!-prim-definition prim-id prim-augmented-def)
+  (dict-set! prim-table #'prim-id #'prim-augmented-def))
+
 (define-syntax (register-primitive! stx)
   (syntax-parse stx
     [(_ prim-id)
      #:with prim-augmented-def (dict-ref prim-table #'prim-id)
      #'(begin-for-syntax
          (dict-set! prim-table #'prim-id #'prim-augmented-def))]))
+
+(define-for-syntax (get-prim-definition id)
+  (dict-ref prim-table id #f))
 
 (define-syntax (prim-definition stx)
   (syntax-parse stx
