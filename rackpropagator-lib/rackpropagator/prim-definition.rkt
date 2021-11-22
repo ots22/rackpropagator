@@ -19,7 +19,7 @@
          require/primal+backprop
          require/backprop
          (for-syntax get-prim-definition
-                     set!-prim-definition))
+                     set-prim-definition!))
 
 (define-for-syntax prim-table (make-free-id-table))
 
@@ -28,18 +28,18 @@
 (define-syntax-parameter current-non-prim-transform
   (syntax-parser
     [(_ other)
-     ;; #'(let ([other* (strip-backprop other)])
-     ;;     (if (procedure? other*)
-     ;;         (λ xs
-     ;;           (proc-result
-     ;;            (apply other* xs)
-     ;;            (λ (Aw)
-     ;;              (if (gen-zero? Aw)
-     ;;                  Aw
-     ;;                  (unknown-backprop 'other)))))
-     ;;         other))
+     #'(let ([other* (strip-backprop other)])
+         (if (procedure? other*)
+             (λ xs
+               (proc-result
+                (apply other* xs)
+                (λ (Aw)
+                  (if (gen-zero? Aw)
+                      Aw
+                      (unknown-backprop 'other)))))
+             other))
 
-     #'(λ xs (proc-result (apply other xs) (λ (Aw) (if (gen-zero? Aw) Aw (unknown-backprop 'other)))))
+     ;#'(λ xs (proc-result (apply other xs) (λ (Aw) (if (gen-zero? Aw) Aw (unknown-backprop 'other)))))
      
      ]))
 
@@ -49,7 +49,7 @@
      (dict-set! prim-table #'prim-id #'prim-augmented-def)
      #'(void)]))
 
-(define-for-syntax (set!-prim-definition prim-id prim-augmented-def)
+(define-for-syntax (set-prim-definition! prim-id prim-augmented-def)
   (dict-set! prim-table #'prim-id #'prim-augmented-def))
 
 (define-syntax (register-primitive! stx)

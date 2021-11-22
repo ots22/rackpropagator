@@ -24,57 +24,30 @@
 (provide D+)
 
 (define-for-syntax prim->backprop-intro (make-free-id-table))
-;; (define-for-syntax backprop-intro->prim (make-free-id-table))
 
 
-(define-for-syntax (get-anf-outer-def expr)
+(define-for-syntax (anf-outer-binding expr)
   (syntax-parse expr
     #:literal-sets (kernel-literals)
     [(let-values (((x-result-arg) e*)) x-result-final)
+
      #:fail-unless (free-identifier=? #'x-result-arg #'x-result-final)
      "Result of anf-normalize had an unexpected form"
-     
+
      #'e*]))
 
-(define-for-syntax (introduce-primitive p)
-  (if (dict-has-key? prim->backprop-intro p)
-      (dict-ref prim->backprop-intro p)
-      (let ([p*-def (get-prim-definition p)])
-        (if p*-def
-            (let ([p*-lifted (syntax-local-lift-expression p*-def)])
-              (dict-set! prim->backprop-intro p p*-lifted)
-              (let* ([p*-def-anf (set!->set-box! (anf-normalize (local-expand p*-def 'expression '())))]
-                     [p*-def-anf-outer (get-anf-outer-def p*-def-anf)]
-                     
-                     ;[__ (displayln (syntax->datum p*-def-anf-outer))]
-                     
-                     [D*p* (reverse-transform p*-def-anf-outer)])
-                (set!-prim-definition p*-lifted D*p*)
-                p*-lifted))
-            (tagged p)))))
-  
-;; (dict-ref! prim->backprop-intro p
-;;              (λ ()
-;;                (let* ([p*-def (get-prim-definition p)]
-;;                       [p*-lifted (syntax-local-lift-expression p*-def)]
-                      
-;;                       [p*-def-anf (set!->set-box! (anf-normalize (local-expand p*-def 'expression '())))]
-;;                       [p*-def-anf-outer (get-anf-outer-def p*-def-anf)]
+(define-for-syntax (free-vars stx)
+  (set->list (anf-free-vars stx)))
 
-;;                       [__ (displayln (syntax->datum p*-def-anf-outer))]
+(define-for-syntax (anf-expand-expression expr)
+  (set!->set-box! (anf-normalize (local-expand expr 'expression '()))))
 
-;;                       [D*p* (reverse-transform p*-def-anf-outer)])
-;;                  (set!-prim-definition p*-lifted D*p*)
-;;                  p*-lifted))))
 
 (define-for-syntax (id-modifier [pre ""] [post ""])
   (let ([ids (make-free-id-table)])
     (λ (id)
       (let ([name (format-id #f "~a~a~a" pre id post)])
         (dict-ref! ids id (generate-temporary name))))))
-
-(define-for-syntax (free-vars stx)
-  (set->list (anf-free-vars stx)))
 
 (begin-for-syntax
   (define backpropagator (id-modifier "<-" "-"))
@@ -117,6 +90,37 @@
              #:attr result #'body)))
 
 
+;; introduce-prim-def! identifier? syntax? -> identifier?
+;;
+;; Given p, an identifier representing a primitive, and p*-def,
+;; syntax representing the definition of its reverse transformation,
+;; lifts p*-def and returns the lifted identifier.  In addition,
+;; p*-def is itself reverse transformed, and registered as the
+;; primitive definition of the lifted identifier.
+(define-for-syntax (introduce-prim-def! p p*-def)
+  (let ([p*-lifted (syntax-local-lift-expression p*-def)])
+    (dict-set! prim->backprop-intro p p*-lifted)
+    (set-prim-definition! p*-lifted
+                          (reverse-transform
+                           (anf-outer-binding
+                            ;; box-adjoints needs to have a parameterization here
+                            (anf-expand-expression p*-def))))
+    p*-lifted))
+
+;; reverse-tag : (listof identifier?) identifier? -> identifier?
+(define-for-syntax (reverse-tag bound-ids id)
+  (dict-ref prim->backprop-intro id
+            (λ ()
+              (cond
+                [(set-member? (immutable-free-id-set bound-ids) id) (tagged id)]
+                ;; handle case of current-non-prim-transform here? Or
+                ;; in introduce-prim-def!? (expands to #'(if ...)) so
+                ;; reverse-transform won't work with it. Must produce
+                ;; an identifier.
+                [(get-prim-definition id) => (curry introduce-prim-def! id)]
+                [else id]))))
+
+
 ;; Note: takes a 'let-values' style binding, and produces a binding
 ;; form for sum-destructuring-let (sheds one level of parens around
 ;; the id)
@@ -130,7 +134,7 @@
      #'(lhs.tagged c)]
 
     [((lhs) x)
-     #:with x-tagged-or-prim (introduce-primitive #'x)
+     #:with x-tagged-or-prim (reverse-tag bound-ids #'x)
      #'(lhs.tagged x-tagged-or-prim)]
 
     [((lhs) (#%plain-lambda formals M))
@@ -139,7 +143,7 @@
      #'(lhs.tagged transformed-expr)]
 
     [((lhs) (#%plain-app x0 xs ...))
-     #:with (x0-tagged xs-tagged ...) (stx-map introduce-primitive #'(x0 xs ...))
+     #:with (x0-tagged xs-tagged ...) (stx-map (curry reverse-tag bound-ids) #'(x0 xs ...))
      #'((proc-result lhs.tagged lhs.backprop) (x0-tagged xs-tagged ...))]
 
     ;; what if x-test (and maybe x-true/false?) are primitives?
@@ -195,13 +199,13 @@
      #:with (x ...) #'(B.x ...)
      #:with result:id/backprop-ids #'body.result
 
-     #:with result-tagged (introduce-primitive #'result)
-
      #:with (x-free ...) (free-vars #'lam)
 
      #:do [(define bound-ids* (append bound-ids
                                       (syntax->list #'(formals.vars ...))
                                       (syntax->list #'(x ...))))]
+
+     #:with result-tagged (reverse-tag bound-ids* #'result)
 
      #:with (primal-bindings ...)
      (map (curryr ϕ bound-ids*) (syntax-e #'(B ...)))
@@ -230,15 +234,9 @@
   (syntax-parse stx
     #:literal-sets (kernel-literals)
     [(_ e)
-     #:with e-anf
-     (set!->set-box! (anf-normalize (local-expand #'e 'expression '())))
-
-     #:with (let-values (((x-result-arg) e*)) x-result-final) #'e-anf
-     #:fail-unless (free-identifier=? #'x-result-arg #'x-result-final)
-     "Result of anf-normalize had an unexpected form"
-
+     #:with e-anf (anf-expand-expression #'e)
+     #:with e* (anf-outer-binding #'e-anf)
      #:with De* (reverse-transform #'e*)
-
      #'(let ([box-adjoints (make-hasheq)])
          (syntax-parameterize ([current-box-adjoints
                                 (make-rename-transformer #'box-adjoints)])
@@ -266,105 +264,44 @@
   (syntax-parse stx
     #:literal-sets (kernel-literals)
     [(_ e)
-     #:with e-anf
-     (set!->set-box! (anf-normalize (local-expand #'e 'expression '())))
-
-     #:with (let-values (((x-result-arg) e*)) x-result-final) #'e-anf
-     #:fail-unless (free-identifier=? #'x-result-arg #'x-result-final)
-     "Result of anf-normalize had an unexpected form"
-
+     #:with e-anf (anf-expand-expression #'e)
+     #:with e* (anf-outer-binding #'e-anf)
      #:with De* (reverse-transform #'e*)
-
      #'De*]))
 
 
-(define-syntax (define/backprop stx)
-  (syntax-parse stx
-    ;; TODO formals
-    [(_ (f xs ...) body ...)
-     #:with (xs* ...) (generate-temporaries #'(xs ...))
-     #:with D*f (local-expand #'(D* (λ (xs* ...) (define (f xs ...) body ...) (f xs* ...)))
-                              'expression
-                              #f)
-     #'(begin
-         (define (f xs ...) body ...)
-         (local-register-primitive! f D*f))]
 
-    ;; [(_ (f . xs) body ...)
-    ;;  #:with xs* (generate-temporaries #'xs)
-    ;;  #:with D*f (local-expand #'(D* (λ xs* (define (f . xs) body ...) (apply f xs*)))
-    ;;                           'expression
-    ;;                           #f)
-    ;;  #'(begin
-    ;;      (define (f . xs) body ...)
-    ;;      (local-register-primitive! f D*f))]
-    
-    ;; [(_ f body ...)
-    ;;  #:with D*f (local-expand #'(D* (λ xs (define f body ...) (apply f xs)))
-    ;;                           'expression
-    ;;                           #f)
-    ;;  #'(begin
-    ;;      (define f body ...)
-    ;;      (local-register-primitive! f D*f))]
-    ))
 
-;; this isn't going to work I think - recursive call won't terminate
-;; (define-syntax (D+-nonlocal stx)
+
+
+
+
+;; (define-syntax (define/backprop stx)
 ;;   (syntax-parse stx
-;;     #:literal-sets (kernel-literals)
-;;     [(_ e)
-;;      #:with e-anf
-;;      (set!->set-box! (anf-normalize (local-expand #'e 'expression '())))
-
-;;      #:with (let-values (((x-result-arg) e*)) x-result-final) #'e-anf
-;;      #:fail-unless (free-identifier=? #'x-result-arg #'x-result-final)
-;;      "Result of anf-normalize had an unexpected form"
-
-;;      #:with (De* (prim:id prim-intro:id) ...) (reverse-transform #'e*)
-
-;;      #:with ((distinct-prim distinct-prim-intro) ...)
-;;      (remove-duplicates (syntax-e #'((prim prim-intro) ...))
-;;                         free-identifier=? #:key stx-car)
-
-;;      #:with (prim-def ...) #'((prim-definition distinct-prim) ...)
-
-;;      #:with (distinct-prim-intro-ids ...) (stx-map syntax-local-lift-expression #'(prim-def ...))
-
-;;      ;; wrong number of ellipsis
-;;      #:with D*f (local-expand #'(D+-nonlocal (λ xs (define f prim-def) (apply f xs)))
+;;     ;; TODO formals
+;;     [(_ (f xs ...) body ...)
+;;      #:with (xs* ...) (generate-temporaries #'(xs ...))
+;;      #:with D*f (local-expand #'(D* (λ (xs* ...) (define (f xs ...) body ...) (f xs* ...)))
 ;;                               'expression
 ;;                               #f)
-;;      (define ignored (stx-map syntax-local-lift-expression 
-;;                               #'(local-register-primitive! distinct-prim-intro-ids D*f)))
-                              
-;;      #'(let ([box-adjoints (make-hasheq)])
-;;          (syntax-parameterize ([current-box-adjoints
-;;                                 (make-rename-transformer #'box-adjoints)]
+;;      #'(begin
+;;          (define (f xs ...) body ...)
+;;          (local-register-primitive! f D*f))]
 
-;;                                [current-non-prim-transform
-;;                                 (syntax-parser
-;;                                   [(_ other)
-;;                                    #'(let ([other* (strip-backprop other)])
-;;                                        (if (procedure? other*)
-;;                                            (λ xs
-;;                                              (proc-result
-;;                                               (apply other* xs)
-;;                                               (λ (Aw)
-;;                                                 (if (gen-zero? Aw)
-;;                                                     Aw
-;;                                                     (unknown-backprop 'other)))))
-;;                                            other))])])
+;;     ;; [(_ (f . xs) body ...)
+;;     ;;  #:with xs* (generate-temporaries #'xs)
+;;     ;;  #:with D*f (local-expand #'(D* (λ xs* (define (f . xs) body ...) (apply f xs*)))
+;;     ;;                           'expression
+;;     ;;                           #f)
+;;     ;;  #'(begin
+;;     ;;      (define (f . xs) body ...)
+;;     ;;      (local-register-primitive! f D*f))]
 
-;;              (let ([D+f De*])
-;;                (λ xs
-;;                  (let ([primal+backprop (apply D+f xs)])
-;;                    (proc-result
-;;                     (primal primal+backprop)
-;;                     (λ Aw
-;;                       (coerce-zero
-;;                        ;; drop terms from closed-over variables
-;;                        (cdr (apply (backprop primal+backprop) Aw))
-;;                        xs))))))))]))
-
-;; (define Df (D+-nonlocal (λ (x y) (+ x y))))
-
+;;     ;; [(_ f body ...)
+;;     ;;  #:with D*f (local-expand #'(D* (λ xs (define f body ...) (apply f xs)))
+;;     ;;                           'expression
+;;     ;;                           #f)
+;;     ;;  #'(begin
+;;     ;;      (define f body ...)
+;;     ;;      (local-register-primitive! f D*f))]
+;;     ))
