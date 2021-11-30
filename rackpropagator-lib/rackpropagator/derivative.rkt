@@ -121,6 +121,39 @@
                 [else id]))))
 
 
+;; TODO unknown-backprops
+;;  - reverse-tag looks up prim id, otherwise always returns 'tagged'
+;;  - have a separate pass (to phi, rho) that checks for unknown identifiers
+;;  - introduce these as let bindings (to the 'unknown' handling
+;;    expression) in the function built by reverse-transform
+;;    - if an unknown is used by the input function *and* a nested
+;;      function, this will introduce the same identifier in each of the
+;;      transformed functions, but, I can't see why that wouldn't work.
+
+;;  - potential drawback - is there a more elegant way of doing this?
+;;    Differentiating repeatedly would cause a lot of these definitions
+;;    to be introduced.
+;;    - can't include as lifts, since they might refer to 'more local'
+;;      bindings than at module level (consider D+ wrapped in a let)
+;;    - maybe just minimise the code: have a builtin 'unknown' again
+;;      (that takes the value and a symbol for its name in the error
+;;      reporting)
+;;    - add a syntax property to the introduced definition (but then
+;;      what? ignore them?)
+
+;; TODO box-adjoints
+;;  - add extra argument and pass to each backpropagator
+;;  - some care needed: need to use the same one in each nested
+;;    reverse-transform (part of the same derivative), but a different
+;;    one for each higher derivative.
+;;  - reverse-mode produces a function with this signature too:
+;;    perhaps okay to rely on the caller to get this right, and
+;;    otherwise this is self-working
+
+;; TODO filter out extra closure sensitivities
+;;  - should be straightforward now we can check for both bound-vars
+;;    and prims
+
 ;; Note: takes a 'let-values' style binding, and produces a binding
 ;; form for sum-destructuring-let (sheds one level of parens around
 ;; the id)
