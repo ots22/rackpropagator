@@ -10,7 +10,7 @@
                      syntax/id-table
                      syntax/parse))
 
-(provide current-box-adjoints
+(provide ;current-box-adjoints
          current-non-prim-transform
          local-register-primitive!
          register-primitive!
@@ -23,7 +23,7 @@
 
 (define-for-syntax prim-table (make-free-id-table))
 
-(define-syntax-parameter current-box-adjoints #f)
+;(define-syntax-parameter current-box-adjoints #f)
 
 (define-syntax-parameter current-non-prim-transform
   (syntax-parser

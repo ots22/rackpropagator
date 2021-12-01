@@ -187,7 +187,7 @@
     ;
     ))
 
-(define-for-syntax (ρ b)
+(define-for-syntax (ρ b box-adjoints)
   (syntax-parse b
     #:conventions (anf-convention)
     #:local-conventions ([#rx"^x" id/backprop-ids]
@@ -205,12 +205,12 @@
 
     [((lhs) (#%plain-app x0 xs ...))
      #'((x0.sensitivity xs.sensitivity ...)
-        (lhs.backprop lhs.sensitivity))]
+        (lhs.backprop lhs.sensitivity box-adjoints))]
 
     ;; what if x-test (and maybe x-true/false?) are primitives?
     [((lhs) (if x-test (#%plain-app x-true) (#%plain-app x-false)))
      #'((x-true.sensitivity x-false.sensitivity)
-        (let ([b (car (lhs.backprop lhs.sensitivity))])
+        (let ([b (car (lhs.backprop lhs.sensitivity box-adjoints))])
           (if x-test.tagged
               (list b (gen-zero))
               (list (gen-zero) b))))]
@@ -244,13 +244,13 @@
      (map (curryr ϕ bound-ids*) (syntax-e #'(B ...)))
 
      #:with (backprop-bindings ...)
-     (map ρ (reverse (syntax-e #'(B ...))))
+     (map (curryr ρ #'box-adjoints) (reverse (syntax-e #'(B ...))))
 
      #'(λ formals.tagged
          (destructuring-sum-let* (primal-bindings ...)
            (proc-result
             result-tagged
-            (λ (result.dummy)
+            (λ (result.dummy box-adjoints)
               (destructuring-sum-let*
                   ([x-free.sensitivity (gen-zero)] ...
                    [formals.sensitivity-vars (gen-zero)] ...
@@ -270,19 +270,17 @@
      #:with e-anf (anf-expand-expression #'e)
      #:with e* (anf-outer-binding #'e-anf)
      #:with De* (reverse-transform #'e*)
-     #'(let ([box-adjoints (make-hasheq)])
-         (syntax-parameterize ([current-box-adjoints
-                                (make-rename-transformer #'box-adjoints)])
-           (let ([D+f De*])
-             (λ xs
-               (let ([primal+backprop (apply D+f xs)])
-                 (proc-result
-                  (primal primal+backprop)
-                  (λ Aw
-                    (coerce-zero
-                     ;; drop terms from closed-over variables
-                     (cdr (apply (backprop primal+backprop) Aw))
-                     xs))))))))]))
+     #'(let ([Abox (make-hasheq)])
+         (let ([D+f De*])
+           (λ xs
+             (let ([primal+backprop (apply D+f xs)])
+               (proc-result
+                (primal primal+backprop)
+                (λ (Aw)
+                  (coerce-zero
+                   ;; drop terms from closed-over variables
+                   (cdr ((backprop primal+backprop) Aw Abox))
+                   xs)))))))]))
 
 ;; TODO better name!
 ;;

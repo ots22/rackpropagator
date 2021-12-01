@@ -18,10 +18,10 @@
 (require/backprop
  racket
  [(+ . xs)
-  (λ (Aw) (cons '() (make-list (length xs) Aw)))]
+  (λ (Aw Abox) (cons '() (make-list (length xs) Aw)))]
 
  [(- . xs)
-  (λ (Aw)
+  (λ (Aw Abox)
     (cons '()
           (if (= (length xs) 1)
               (scale Aw -1)
@@ -29,70 +29,71 @@
                                   (scale Aw -1))))))]
 
  [(* x y)
-  (λ (Aw) (list '() (scale Aw y) (scale Aw x)))]
+  (λ (Aw Abox) (list '() (scale Aw y) (scale Aw x)))]
 
  [(sub1 x)
-  (λ (Aw) (list '() 1.0))]
+  (λ (Aw Abox) (list '() 1.0))]
 
  [(cons a b)
-  (λ (Aw) (list '() (car0 Aw) (cdr0 Aw)))]
+  (λ (Aw Abox) (list '() (car0 Aw) (cdr0 Aw)))]
 
  [(car xs)
-  (λ (Aw) (list '() (cons Aw (gen-zero))))]
+  (λ (Aw Abox) (list '() (cons Aw (gen-zero))))]
 
  [(cdr xs)
-  (λ (Aw) (list '() (cons (gen-zero) Aw)))]
+  (λ (Aw Abox) (list '() (cons (gen-zero) Aw)))]
 
  [(cadr xs)
-  (λ (Aw) (list '() (cons (gen-zero) (cons Aw (gen-zero)))))]
+  (λ (Aw Abox) (list '() (cons (gen-zero) (cons Aw (gen-zero)))))]
 
  [(list . xs)
-  (λ (Aw) (cons '() Aw))]
+  (λ (Aw Abox) (cons '() Aw))]
 
  ;; TODO fix (no multiple values/split-at)
  [(list* . xs)
-  (λ (Aw)
+  (λ (Aw Abox)
     (cons '()
           (call-with-values
            (λ () (split-at Aw (sub1 (length xs))))
            (λ (head tail) (append head (list tail))))))]
 
  [(identity x)
-  (λ (Aw) (list '() Aw))]
+  (λ (Aw Abox) (list '() Aw))]
 
  ;; TODO
  ;; foldl/foldl0
 
  [(make-list n x)
-  (λ (Aw) (list '() 0 (foldl0 add (gen-zero) Aw)))]
+  (λ (Aw Abox) (list '() 0 (foldl0 add (gen-zero) Aw)))]
 
  [(> . xs)
-  (λ (Aw) (cons '() (make-list (length xs) (gen-zero))))]
+  (λ (Aw Abox) (cons '() (make-list (length xs) (gen-zero))))]
 
  [(< . xs)
-  (λ (Aw) (cons '() (make-list (length xs) (gen-zero))))]
+  (λ (Aw Abox) (cons '() (make-list (length xs) (gen-zero))))]
 
  [(= . xs)
-  (λ (Aw) (cons '() (make-list (length xs) (gen-zero))))]
+  (λ (Aw Abox) (cons '() (make-list (length xs) (gen-zero))))]
 
  [(length lst)
-  (λ (Aw) (list '() (gen-zero)))]
+  (λ (Aw Abox) (list '() (gen-zero)))]
 
  [(equal? a b)
-  (λ (Aw) (cons '() (list (gen-zero) (gen-zero))))]
+  (λ (Aw Abox) (cons '() (list (gen-zero) (gen-zero))))]
 
  [(make-hasheq)
-  (λ (Aw) (list '()))]
+  (λ (Aw Abox) (list '()))]
 
  [(unbox b)
-  (λ (Aw)
-    (let* ([Ab (hash-ref current-box-adjoints b)])
+  (λ (Aw Abox)
+    (let* ([Ab (hash-ref! Abox b (box (gen-zero)))])
       (set-box! Ab (add (unbox Ab) Aw))
       (list '() (gen-zero))))]
 
  [(set-box! b x)
-  (λ (Aw-void)
-    (let* ([Ab (hash-ref current-box-adjoints b)]
+  ;; Aw should be (void), and the unused
+  (λ (Aw Abox)
+    (let* ([Ab (hash-ref! Abox b (box (gen-zero)))]
            [Ax (unbox Ab)])
       (set-box! Ab (gen-zero))
       (list '() (gen-zero) Ax)))])
@@ -103,11 +104,11 @@
  [box
   (λ (x)
     (let ([b (box x)])
-      (hash-set! current-box-adjoints b (box (gen-zero)))
       (proc-result
        b
-       (λ (Aw-ignore)
-         (let* ([Ab (hash-ref current-box-adjoints b)]
+       ;; Aw unused
+       (λ (Aw Abox)
+         (let* ([Ab (hash-ref! Abox b (box (gen-zero)))]
                 [Ax (unbox Ab)])
            (set-box! Ab (gen-zero))
            (list '() Ax))))))]
@@ -119,8 +120,8 @@
            [bs (map backprop p+bs)])
       (proc-result
        ps
-       (λ (Aws)
-         (let* ([^f+xs (map (λ (b Aw) (b Aw)) bs Aws)]
+       (λ (Aw Abox)
+         (let* ([^f+xs (map (λ (b Aw) (b Aw Abox)) bs Aw)]
                 [^fs (map car ^f+xs)]
                 ;; list with same length as each element of xs
                 [^xs (map cdr ^f+xs)]
@@ -133,10 +134,10 @@
 (require/backprop
  racket/unsafe/ops
  [(unsafe-car xs)
-  (λ (Aw) (list '() (cons Aw (gen-zero))))]
+  (λ (Aw Abox) (list '() (cons Aw (gen-zero))))]
 
  [(unsafe-cdr xs)
-  (λ (Aw) (list '() (cons (gen-zero) Aw)))])
+  (λ (Aw Abox) (list '() (cons (gen-zero) Aw)))])
 
 
 (require/primal+backprop
@@ -147,7 +148,7 @@
            [p (primal p+b)]
            [b (backprop p+b)])
       (proc-result p
-                   (λ (Aw)
+                   (λ (Aw Abox)
                      (let* ([^f+args (b Aw)]
                             [^f (car ^f+args)]
                             [^args (cdr ^f+args)]
@@ -160,31 +161,31 @@
 (require/backprop
  "builtins.rkt"
  [(add . xs)
-  (λ (Aw) (cons '() (make-list (length xs) Aw)))]
+  (λ (Aw Abox) (cons '() (make-list (length xs) Aw)))]
 
  [(scale v a)
-  (λ (Aw) (list '() (scale Aw a) (scale v Aw)))]
+  (λ (Aw Abox) (list '() (scale Aw a) (scale v Aw)))]
 
  [(car0 xs)
-  (λ (Aw) (list '() (cons Aw (gen-zero))))]
+  (λ (Aw Abox) (list '() (cons Aw (gen-zero))))]
 
  [(cdr0 xs)
-  (λ (Aw) (list '() (cons (gen-zero) Aw)))]
+  (λ (Aw Abox) (list '() (cons (gen-zero) Aw)))]
 
  [(proc-result p b)
-  (λ (Aw) (list '() (primal Aw) (backprop Aw)))]
+  (λ (Aw Abox) (list '() (primal Aw) (backprop Aw)))]
 
  [(primal r)
-  (λ (Aw) (list '() (proc-result Aw (gen-zero))))]
+  (λ (Aw Abox) (list '() (proc-result Aw (gen-zero))))]
 
  [(backprop r)
-  (λ (Aw) (list '() (proc-result (gen-zero) Aw)))]
+  (λ (Aw Abox) (list '() (proc-result (gen-zero) Aw)))]
 
  [(gen-zero)
-  (λ (Aw) (list '()))]
+  (λ (Aw Abox) (list '()))]
 
  [(coerce-zero a b)
-  (λ (Aw) (list '() Aw (gen-zero)))])
+  (λ (Aw Abox) (list '() Aw (gen-zero)))])
 
 
 (define (foldl0 f x0 xs)
