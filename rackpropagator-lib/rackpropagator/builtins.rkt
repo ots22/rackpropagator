@@ -94,7 +94,16 @@
     [(proc-result? p) (proc-result-primal p)]
     [else p]))
 
-(define (unknown-backprop op)
-  (raise-arguments-error 'prim-definition
-                         "Backpropagator unknown"
-                         "op" op))
+(define (unknown-backprop op op-name)
+  (let ([op* (strip-backprop op)])
+         (if (procedure? op*)
+             (λ xs
+               (make-proc-result
+                (apply op* xs)
+                (λ (Aw Abox)
+                  (if (gen-zero? Aw)
+                      Aw
+                      (raise-arguments-error 'prim-definition
+                                             "Backpropagator unknown"
+                                             "op" op-name)))))
+             op)))
