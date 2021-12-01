@@ -5,10 +5,7 @@
          racket/unsafe/ops
          "apply.rkt"
          "builtins.rkt"
-         "prim-definition.rkt"
-         (for-syntax racket/base
-                     syntax/parse))
-
+         "prim-definition.rkt")
 
 (provide (backprop-out + - * sub1 cons car cdr cadr list list* identity
                        make-list > < = length equal? make-hasheq unbox set-box!
@@ -149,7 +146,7 @@
            [b (backprop p+b)])
       (proc-result p
                    (λ (Aw Abox)
-                     (let* ([^f+args (b Aw)]
+                     (let* ([^f+args (b Aw Abox)]
                             [^f (car ^f+args)]
                             [^args (cdr ^f+args)]
                             [n-1 (sub1 (length args))]
