@@ -37,7 +37,7 @@
 
 ;; Walk a, and if it contains a gen-zero, coerce this to have a
 ;; conforming shape to b
-;; 
+;;
 ;; coerce-zero : pair? pair? -> pair?
 
 ;; TODO better error message for non-conforming a and b
@@ -72,7 +72,7 @@
      (make-proc-result
       (add (proc-result-primal0 a) (proc-result-primal0 b))
       (add (proc-result-backprop0 a) (proc-result-backprop0 b)))]
-      
+
     [else (+ a b)]))
 
 (define (scale a b)
