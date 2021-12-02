@@ -1,8 +1,14 @@
 TODO
 
-* 'define' backprop bindings, instead of 'let'
-  - make this optional?
-  - how?
+* Renaming - be consistent about:
+  - reverse transform
+  - backprop
+  - primitive
+  - primal
+  - adjoint
+  - pullback
+  - derivative/gradient?/D/nabla
+  - Jacobian/J
 
 * Interface
   - D+ (sugared, sets all the syntax parameters, filters the closure vars out)
@@ -11,9 +17,9 @@ TODO
   - grad
   - explicit closure vars can be passed to D+/D* by the user
   - make (D+ f) work as well as (D+ (lambda (x) (f x))) [should just look up the backpropagator for primitives]
-  - better names for the above
+  - better names for the above too
 
-  - Use generic collections ('linear' interface)
+* Use generic collections ('linear' interface)
 
 * Robustness
   - better error messages (macros/syntax)
@@ -24,19 +30,20 @@ TODO
   - Don't include free-vars in closure variable sensitivities (works, but could blow up quickly)
 
 * Additional backpropagators
- - foldl/foldl0 (definition with define/backprop now works)
- - math/array
- - hash tables (second derivative of)
- - list* without split-at
- - */multiply with more than two args
+  - define some of these with define/backprop
+  - foldl/foldl0 (definition with define/backprop now works)
+  - math/array
+  - hash tables (second derivative of)
+  - list* without split-at
+  - */multiply with more than two args
 
 * Documentation
- - Tips for writing backpropagators (doc page)
-   - use scale and add instead of * and +, which will handle structured input and gen-zero
-   - might be passed a gen-zero: make sure that this case is handled
-     properly, including in e.g. tail position in a list, where it may
-     mean null
- - Limitation: keyword arguments won't work
+  - Tips for writing backpropagators (doc page)
+    - use scale and add instead of * and +, which will handle structured input and gen-zero
+    - might be passed a gen-zero: make sure that this case is handled
+      properly, including in e.g. tail position in a list, where it may
+      mean null
+  - Limitation: keyword arguments won't work
 
 
 

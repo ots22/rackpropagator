@@ -31,7 +31,10 @@
                      [anf2-binding-expr anf-binding-expr]
                      [anf2-expr anf-expr]
                      [anf2? anf?]
-                     [anf2-normalize anf-normalize]))
+                     [anf2-normalize anf-normalize])
+
+         anf-outer-binding
+         anf-expand-expression)
 
 ;; ----------------------------------------
 ;; Conventions and syntax classes
@@ -497,3 +500,23 @@
        #'(let-values (((x) st)) -M2)]))
 
   (anf2-normalize (rec stx)))
+
+;; ----------------------------------------
+
+;; anf-expand-expression : expr? -> anf2?
+(define (anf-expand-expression expr)
+  (set!->set-box! (anf2-normalize (local-expand expr 'expression '()))))
+
+;; Given an anf2 expression, extract the outermost let-bound expression
+(define (anf-outer-binding expr)
+  (syntax-parse expr
+    #:literal-sets (kernel-literals)
+    [(let-values (((x-result-arg) e*)) x-result-final)
+
+     #:fail-unless (and (identifier? #'x-result-final)
+                        (free-identifier=? #'x-result-arg #'x-result-final))
+     "Result of anf-normalize had an unexpected form"
+
+     #'e*]
+
+    [other #f]))

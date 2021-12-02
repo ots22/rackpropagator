@@ -77,7 +77,7 @@
 
 (define (scale a b)
   (cond
-    [(gen-zero? a) a]
+    [(or (gen-zero? a) (gen-zero? b)) (make-gen-zero)]
     [else (* a b)]))
 
 (struct proc-result (primal backprop)

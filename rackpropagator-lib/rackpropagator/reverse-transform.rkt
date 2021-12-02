@@ -1,12 +1,17 @@
 #lang racket/base
 
-(require (for-template racket/base
+(require (for-template (except-in racket/base apply)
+                       "apply.rkt"
                        "builtins.rkt"
+                       "prim-definition.rkt"
                        "sum-let.rkt")
+         racket/list
          racket/dict
          racket/function
          racket/syntax
          racket/set
+         syntax/parse
+         syntax/stx
          syntax/id-table
          syntax/id-set
          syntax/parse
@@ -14,14 +19,17 @@
 
 (provide reverse-transform)
 
+(define prim->backprop-intro (make-free-id-table))
+
+(define (free-vars stx)
+  (filter-not get-prim-definition (set->list (anf-free-vars stx))))
+
+
 (define (id-modifier [pre ""] [post ""])
   (let ([ids (make-free-id-table)])
     (λ (id)
       (let ([name (format-id #f "~a~a~a" pre id post)])
         (dict-ref! ids id (generate-temporary name))))))
-
-(define (free-vars stx)
-  (set->list (anf-free-vars stx)))
 
 (define backpropagator (id-modifier "<-" "-"))
 (define sensitivity (id-modifier "^" "-"))
@@ -33,7 +41,8 @@
            #:attr sensitivity (sensitivity #'x)
            #:attr backprop (backpropagator #'x)
            #:attr dummy (dummy #'x)
-           #:attr tagged (tagged #'x)))
+           ;; TODO - don't need this any more?
+           #:attr tagged (dict-ref prim->backprop-intro #'x (tagged #'x))))
 
 (define-syntax-class lambda-formals/backprop-ids
   (pattern (x:id/backprop-ids ...)
@@ -54,13 +63,37 @@
 
 (define-syntax-class nested-let-values
   #:literal-sets (kernel-literals)
-  (pattern (let-values (B)
-             body:nested-let-values)
+  (pattern (let-values (B) body:nested-let-values)
            #:attr (bindings 1) (cons #'B (syntax-e #'(body.bindings ...)))
            #:attr result #'body.result)
   (pattern body:id
            #:attr (bindings 1) null
            #:attr result #'body))
+
+
+;; introduce-prim-def! identifier? syntax? -> identifier?
+;;
+;; Given p, an identifier representing a primitive, and p*-def,
+;; syntax representing the definition of its reverse transformation,
+;; lifts p*-def and returns the lifted identifier.  In addition,
+;; p*-def is itself reverse transformed, and registered as the
+;; primitive definition of the lifted identifier.
+(define (introduce-prim-def! p p*-def)
+  (let ([p*-lifted (syntax-local-lift-expression p*-def)])
+    (dict-set! prim->backprop-intro p p*-lifted)
+    (set-prim-definition! p*-lifted
+                          (reverse-transform
+                           (anf-outer-binding
+                            (anf-expand-expression p*-def))))
+    p*-lifted))
+
+;; reverse-tag : (listof identifier?) identifier? -> identifier?
+(define (reverse-tag id)
+  (dict-ref prim->backprop-intro id
+            (λ ()
+              (cond
+                [(get-prim-definition id) => (curry introduce-prim-def! id)]
+                [else (tagged id)]))))
 
 ;; Note: takes a 'let-values' style binding, and produces a binding
 ;; form for sum-destructuring-let (sheds one level of parens around
@@ -72,39 +105,32 @@
                          [lhs id/backprop-ids])
     #:literal-sets (kernel-literals)
     [((lhs) c)
-     (list #'(lhs.tagged c))]
+     #'(lhs.tagged c)]
 
     [((lhs) x)
-     #:do [(define prims (if (member #'x bound-ids free-identifier=?)
-                             '()
-                             (list #'x)))]
-     (cons #'(lhs.tagged x.tagged)
-           prims)]
+     #:with x-tagged-or-prim (reverse-tag #'x)
+     #'(lhs.tagged x-tagged-or-prim)]
 
     [((lhs) (#%plain-lambda formals M))
      #:with (x-free ...) (free-vars #'(#%plain-lambda formals M))
-     #:with (transformed-expr (prim _) ...)
-            (reverse-transform #'(#%plain-lambda formals M) bound-ids)
-     (cons #'(lhs.tagged transformed-expr)
-           (syntax-e #'(prim ...)))]
+     #:with transformed-expr (reverse-transform #'(#%plain-lambda formals M)
+                                                bound-ids)
+     #'(lhs.tagged transformed-expr)]
 
-    ;; If any of x0 xs ... are not in the list of bound ids, add to the list of ids
-    ;; for which to introduce a primitive backpropagator definition
     [((lhs) (#%plain-app x0 xs ...))
-     #:do [(define prims
-             (set->list
-              (set-subtract (immutable-free-id-set (syntax-e #'(x0 xs ...)))
-                            (immutable-free-id-set bound-ids))))]
-     (cons #'((proc-result lhs.tagged lhs.backprop) (x0.tagged xs.tagged ...))
-           prims)]
+     #:with (x0-tagged xs-tagged ...) (stx-map reverse-tag #'(x0 xs ...))
+     #'((proc-result lhs.tagged lhs.backprop) (x0-tagged xs-tagged ...))]
 
     [((lhs) (if x-test (#%plain-app x-true) (#%plain-app x-false)))
-     (list #'((proc-result lhs.tagged lhs.backprop)
-              (if x-test.tagged (x-true.tagged) (x-false.tagged))))]
+     #:with x-test-tagged (reverse-tag #'x-test)
+     #:with x-true-tagged (reverse-tag #'x-true)
+     #:with x-false-tagged (reverse-tag #'x-false)
+     #'((proc-result lhs.tagged lhs.backprop)
+        (if x-test-tagged (x-true-tagged) (x-false-tagged)))]
     ;
     ))
 
-(define (ρ b)
+(define (ρ b box-adjoints)
   (syntax-parse b
     #:conventions (anf-convention)
     #:local-conventions ([#rx"^x" id/backprop-ids]
@@ -122,14 +148,38 @@
 
     [((lhs) (#%plain-app x0 xs ...))
      #'((x0.sensitivity xs.sensitivity ...)
-        (lhs.backprop lhs.sensitivity))]
+        (lhs.backprop lhs.sensitivity box-adjoints))]
 
     [((lhs) (if x-test (#%plain-app x-true) (#%plain-app x-false)))
+     #:with x-test-tagged (reverse-tag #'x-test)
      #'((x-true.sensitivity x-false.sensitivity)
-        (let ([b (car (lhs.backprop lhs.sensitivity))])
-          (if x-test.tagged
+        (let ([b (car (lhs.backprop lhs.sensitivity box-adjoints))])
+          (if x-test-tagged
               (list b (gen-zero))
               (list (gen-zero) b))))]
+    ;;
+    ))
+
+(define (get-unknown-backprops b bound-ids)
+
+  (define (known-binding? id)
+    (or (get-prim-definition id)
+        (set-member? (immutable-free-id-set bound-ids) id)))
+
+  (syntax-parse b
+    #:local-conventions ([#rx"^x" id]
+                         [lhs id])
+    #:literal-sets (kernel-literals)
+    [((lhs) x)
+     (filter-not known-binding? (list #'x))]
+
+    [((lhs) (#%plain-app x0 xs ...))
+     (filter-not known-binding? (syntax-e #'(x0 xs ...)))]
+
+    [((lhs) (if x-test (#%plain-app x-true) (#%plain-app x-false)))
+     (filter-not known-binding? (list #'x-test #'x-true #'x-false))]
+
+    [else '()]
     ;;
     ))
 
@@ -137,10 +187,13 @@
   (syntax-parse f
     #:conventions (anf-convention)
     #:local-conventions ([#rx"^x" id/backprop-ids]
-                         [prim id/backprop-ids]
                          [formals lambda-formals/backprop-ids])
     #:literal-sets (kernel-literals)
 
+    ;;
+    [prim:id (reverse-tag #'prim)]
+
+    ;;
     [{~and lam
            (#%plain-lambda formals
              body:nested-let-values)}
@@ -155,26 +208,31 @@
                                       (syntax->list #'(formals.vars ...))
                                       (syntax->list #'(x ...))))]
 
-     #:with ((primal-bindings prim ...) ...)
+     #:with result-tagged (reverse-tag #'result)
+
+     #:with (primal-bindings ...)
      (map (curryr ϕ bound-ids*) (syntax-e #'(B ...)))
 
      #:with (backprop-bindings ...)
-     (map ρ (reverse (syntax-e #'(B ...))))
+     (map (curryr ρ #'box-adjoints) (reverse (syntax-e #'(B ...))))
 
-     (cons
-      #'(λ formals.tagged
-          (destructuring-sum-let* (primal-bindings ...)
-            (proc-result
-             result.tagged
-             (λ (result.dummy)
-               (destructuring-sum-let*
-                   ([x-free.sensitivity (gen-zero)] ...
-                    [formals.sensitivity-vars (gen-zero)] ...
-                    [x.sensitivity (gen-zero)] ...
-                    [result.sensitivity result.dummy]
-                    backprop-bindings ...)
-                 (list* (list x-free.sensitivity ...)
-                        formals.sensitivity-result ...))))))
-      (syntax-e #'((prim prim.tagged) ... ...)))]
+     #:with (x-unknown ...)
+     (append-map (curryr get-unknown-backprops bound-ids*) (syntax-e #'(B ...)))
+
+     #'(λ formals.tagged
+         (destructuring-sum-let*
+          ([x-unknown.tagged (unknown-backprop x-unknown 'x-unknown)] ...
+            primal-bindings ...)
+           (proc-result
+            result-tagged
+            (λ (result.dummy box-adjoints)
+              (destructuring-sum-let*
+                  ([x-free.sensitivity (gen-zero)] ...
+                   [formals.sensitivity-vars (gen-zero)] ...
+                   [x.sensitivity (gen-zero)] ...
+                   [result.sensitivity result.dummy]
+                   backprop-bindings ...)
+                (list* (list x-free.sensitivity ...)
+                       formals.sensitivity-result ...))))))]
     ;;
     ))
