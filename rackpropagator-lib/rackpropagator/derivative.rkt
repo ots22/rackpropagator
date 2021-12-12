@@ -35,26 +35,26 @@
     [(_ expr)
      ;; figure out arity/formals of expr (which must be a function)
      #'(λ xs
-         (let ([Abox (make-hasheq)]
-               [D+f (lift/D+ expr)])
-           (let ([primal+backprop (apply D+f xs)])
+         (let* ([D+f (lift/D+ expr)]
+                [primal+backprop (apply D+f xs)]
+                [Abox (make-hasheq)])
              (proc-result
               (primal primal+backprop)
               (λ (Aw)
                 (coerce-zero
                  ;; drop terms from closed-over variables
                  (cdr ((backprop primal+backprop) Aw Abox))
-                 xs))))))]))
+                 xs)))))]))
 
 (define-syntax directional-grad
   (syntax-parser
     [(_ expr dirn)
      ;; figure out arity/formals of expr (which must be a function)
      #'(λ xs
-         (let ([Abox (make-hasheq)]
-               [D+f (lift/D+ expr)])
-           (let ([<-f (backprop (apply D+f xs))])
-             (coerce-zero (cdr (<-f dirn Abox)) xs))))]))
+         (let* ([D+f (lift/D+ expr)]
+                [<-f (backprop (apply D+f xs))]
+                [Abox (make-hasheq)])
+             (coerce-zero (cdr (<-f dirn Abox)) xs)))]))
 
 (define-syntax grad
   (syntax-parser

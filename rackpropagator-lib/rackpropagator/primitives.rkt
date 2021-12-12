@@ -10,7 +10,9 @@
 (provide (backprop-out + - * sub1 cons car cdr cadr list list* identity
                        make-list > < = length equal? make-hasheq unbox set-box!
                        box map unsafe-car unsafe-cdr apply add scale car0 cdr0
-                       proc-result primal backprop gen-zero coerce-zero))
+                       proc-result primal backprop gen-zero coerce-zero)
+
+         foldl0)
 
 (require/backprop
  racket

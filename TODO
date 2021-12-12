@@ -9,6 +9,8 @@ TODO
   - pullback
   - derivative/gradient?/D/nabla
   - Jacobian/J
+  - 'tagged' in the reverse-transform source
+    (slightly misleading perhaps, but consistant with Pearlmutter)
 
 * Interface
   - D+ (sugared, sets all the syntax parameters, filters the closure vars out)
@@ -37,6 +39,10 @@ TODO
   - list* without split-at
   - */multiply with more than two args
 
+* Optimizations
+  - next 'phase'
+  - add note to README
+
 * Documentation
   - Tips for writing backpropagators (doc page)
     - use scale and add instead of * and +, which will handle structured input and gen-zero
@@ -44,7 +50,4 @@ TODO
       properly, including in e.g. tail position in a list, where it may
       mean null
   - Limitation: keyword arguments won't work
-
-
-
 
