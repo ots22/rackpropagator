@@ -447,57 +447,57 @@
       [x (target-unbox #'x)]
 
       [(let-values (((x) c)) M)
-       #:with -M (rec #'M)
-       #:with -c (target-box-value #'x #'c)
-       #'(let-values (((x) -c)) -M)]
+       #:with $M (rec #'M)
+       #:with $c (target-box-value #'x #'c)
+       #'(let-values (((x) $c)) $M)]
 
       [(let-values (((x) x1)) M)
-       #:with -M (rec #'M)
-       #:with -x1 (target-box-value #'x (target-unbox #'x1))
-       #'(let-values (((x) -x1)) -M)]
+       #:with $M (rec #'M)
+       #:with $x1 (target-box-value #'x (target-unbox #'x1))
+       #'(let-values (((x) $x1)) $M)]
 
       [(let-values (((x) (#%plain-lambda formals M1))) M2)
-       #:with -M1 (rec #'M1)
-       #:with -M2 (rec #'M2)
-       #:with lam (target-box-value #'x #'(#%plain-lambda formals -M1))
-       #'(let-values (((x) lam)) -M2)]
+       #:with $M1 (rec #'M1)
+       #:with $M2 (rec #'M2)
+       #:with lam (target-box-value #'x #'(#%plain-lambda formals $M1))
+       #'(let-values (((x) lam)) $M2)]
 
       [(let-values (((x) (#%plain-app x0 xs ...))) M)
-       #:with -M (rec #'M)
-       #:with (-x0 -xs ...) (stx-map target-unbox #'(x0 xs ...))
-       #:with app (target-box-value #'x #'(#%plain-app -x0 -xs ...))
-       #'(let-values (((x) app)) -M)]
+       #:with $M (rec #'M)
+       #:with ($x0 $xs ...) (stx-map target-unbox #'(x0 xs ...))
+       #:with app (target-box-value #'x #'(#%plain-app $x0 $xs ...))
+       #'(let-values (((x) app)) $M)]
 
       [(let-values (((x) (if x-test
                              (#%plain-app x-true)
                              (#%plain-app x-false))))
          M)
-       #:with -M (rec #'M)
-       #:with (-x-test -x-true -x-false)
+       #:with $M (rec #'M)
+       #:with ($x-test $x-true $x-false)
        (stx-map target-unbox #'(x-test x-true x-false))
-       #:with branch (target-box-value #'x #'(if -x-test
-                                                 (#%plain-app -x-true)
-                                                 (#%plain-app -x-false)))
-       #'(let-values (((x) branch)) -M)]
+       #:with branch (target-box-value #'x #'(if $x-test
+                                                 (#%plain-app $x-true)
+                                                 (#%plain-app $x-false)))
+       #'(let-values (((x) branch)) $M)]
 
       [(let-values (((x) (set! x1 c))) M)
-       #:with -M (rec #'M)
+       #:with $M (rec #'M)
        #:with st (target-box-value #'x #'(#%plain-app set-box! x1 c))
-       #'(let-values (((x) st)) -M)]
+       #'(let-values (((x) st)) $M)]
 
       [(let-values (((x) (set! x1 x2))) M)
-       #:with -M (rec #'M)
-       #:with -x2 (target-unbox #'x2)
-       #:with st (target-box-value #'x #'(#%plain-app set-box! x1 -x2))
-       #'(let-values (((x) st)) -M)]
+       #:with $M (rec #'M)
+       #:with $x2 (target-unbox #'x2)
+       #:with st (target-box-value #'x #'(#%plain-app set-box! x1 $x2))
+       #'(let-values (((x) st)) $M)]
 
       [(let-values (((x) (set! x1 (#%plain-lambda formals M1)))) M2)
-       #:with -M1 (rec #'M1)
-       #:with -M2 (rec #'M2)
+       #:with $M1 (rec #'M1)
+       #:with $M2 (rec #'M2)
        #:with st (target-box-value
                   #'x
-                  #'(#%plain-app set-box! x1 (#%plain-lambda formals -M1)))
-       #'(let-values (((x) st)) -M2)]))
+                  #'(#%plain-app set-box! x1 (#%plain-lambda formals $M1)))
+       #'(let-values (((x) st)) $M2)]))
 
   (anf2-normalize (rec stx)))
 

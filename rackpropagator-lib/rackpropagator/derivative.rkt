@@ -18,6 +18,7 @@
   (syntax-parser
     [(_ prim:id) (reverse-transform #'prim)]
 
+    ;; When expr is a lambda expression anf-outer-binding succeeds (non-#f)
     [(_ expr)
      #:attr expr* (anf-outer-binding (anf-expand-expression #'expr))
      #:when (attribute expr*)

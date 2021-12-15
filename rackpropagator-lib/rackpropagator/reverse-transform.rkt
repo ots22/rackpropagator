@@ -56,12 +56,12 @@
                             (anf-expand-expression p*-def))))
     p*-lifted))
 
-;; reverse-tag : (listof identifier?) identifier? -> identifier?
+;; get-reversed : (listof identifier?) identifier? -> identifier?
 ;;
 ;; Look up the 'reversed' name of id: it is either a simple renaming
 ;; with reversed, or if id is a primitive, it is the name of the
 ;; introduced primitive definition.
-(define (reverse-tag id)
+(define (get-reversed id)
   (dict-ref prim->reverse-intro id
             (λ ()
               (cond
@@ -76,7 +76,7 @@
            #:attr sensitivity (sensitivity #'x)
            #:attr backprop (backpropagator #'x)
            #:attr dummy (dummy #'x)
-           #:attr reversed (reverse-tag #'x)))
+           #:attr reversed (get-reversed #'x)))
 
 (define-syntax-class lambda-formals/backprop-ids
   (pattern (x:id/backprop-ids ...)
@@ -132,9 +132,7 @@
 
     [((lhs) (if x-test (#%plain-app x-true) (#%plain-app x-false)))
      #'((proc-result lhs.reversed lhs.backprop)
-        (if x-test.reversed (x-true.reversed) (x-false.reversed)))]
-    ;
-    ))
+        (if x-test.reversed (x-true.reversed) (x-false.reversed)))]))
 
 (define (ρ b box-sensitivities)
   (syntax-parse b
@@ -161,11 +159,9 @@
         (let ([b (car (lhs.backprop lhs.sensitivity box-sensitivities))])
           (if x-test.reversed
               (list b (gen-zero))
-              (list (gen-zero) b))))]
-    ;;
-    ))
+              (list (gen-zero) b))))]))
 
-(define (unknown-backprops b bound-ids)
+(define (unknown-transform b bound-ids)
   (define (known-binding? id)
     (or (get-prim-definition id)
         (set-member? (immutable-free-id-set bound-ids) id)))
@@ -183,9 +179,7 @@
     [((lhs) (if x-test (#%plain-app x-true) (#%plain-app x-false)))
      (filter-not known-binding? (list #'x-test #'x-true #'x-false))]
 
-    [else '()]
-    ;;
-    ))
+    [else '()]))
 
 (define (reverse-transform f [bound-ids '()])
   (syntax-parse f
@@ -214,7 +208,7 @@
      (map (curryr ρ #'box-sensitivities) (reverse (syntax-e #'(B ...))))
 
      #:with (x-unknown ...)
-     (append-map (curryr unknown-backprops bound-ids*) (syntax-e #'(B ...)))
+     (append-map (curryr unknown-transform bound-ids*) (syntax-e #'(B ...)))
 
      #'(λ formals.reversed
          (destructuring-sum-let*
@@ -230,6 +224,4 @@
                    [x.sensitivity (gen-zero)] ...
                    backprop-bindings ...)
                 (list* (list x-free.sensitivity ...)
-                       formals.sensitivity-result ...))))))]
-    ;;
-    ))
+                       formals.sensitivity-result ...))))))]))
