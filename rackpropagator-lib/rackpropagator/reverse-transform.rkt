@@ -19,11 +19,11 @@
 
 (provide reverse-transform)
 
-(define prim->backprop-intro (make-free-id-table))
-
 (define (free-vars stx)
   (filter-not get-prim-definition (set->list (anf-free-vars stx))))
 
+;; ----------------------------------------
+;; Renaming
 
 (define (id-modifier [pre ""] [post ""])
   (let ([ids (make-free-id-table)])
@@ -36,13 +36,49 @@
 (define dummy (id-modifier "^" "-dummy-"))
 (define tagged (id-modifier "" "*"))
 
+
+;; ----------------------------------------
+;; State: identifiers of introduced reverse-transformed primitives
+
+(define prim->reverse-intro (make-free-id-table))
+
+(define (get-tagged id)
+  (dict-ref prim->reverse-intro id (tagged id)))
+
+;; reverse-tag : (listof identifier?) identifier? -> identifier?
+(define (reverse-tag id)
+  (dict-ref prim->reverse-intro id
+            (λ ()
+              (cond
+                [(get-prim-definition id) => (curry introduce-prim-def! id)]
+                [else (tagged id)]))))
+
+;; introduce-prim-def! identifier? syntax? -> identifier?
+;;
+;; Given p, an identifier representing a primitive, and p*-def,
+;; syntax representing the definition of its reverse transformation,
+;; lifts p*-def and returns the lifted identifier.  In addition,
+;; p*-def is itself reverse transformed, and registered as the
+;; primitive definition of the lifted identifier.
+(define (introduce-prim-def! p p*-def)
+  (let ([p*-lifted (syntax-local-lift-expression p*-def)])
+    (dict-set! prim->reverse-intro p p*-lifted)
+    (set-prim-definition! p*-lifted
+                          (reverse-transform
+                           (anf-outer-binding
+                            (anf-expand-expression p*-def))))
+    p*-lifted))
+
+
+;; ----------------------------------------
+;; Syntax classes
+
 (define-syntax-class id/backprop-ids
   (pattern x:id
            #:attr sensitivity (sensitivity #'x)
            #:attr backprop (backpropagator #'x)
            #:attr dummy (dummy #'x)
-           ;; TODO - don't need this any more?
-           #:attr tagged (dict-ref prim->backprop-intro #'x (tagged #'x))))
+           #:attr tagged (reverse-tag #'x)))
 
 (define-syntax-class lambda-formals/backprop-ids
   (pattern (x:id/backprop-ids ...)
@@ -70,30 +106,8 @@
            #:attr (bindings 1) null
            #:attr result #'body))
 
+;; ----------------------------------------
 
-;; introduce-prim-def! identifier? syntax? -> identifier?
-;;
-;; Given p, an identifier representing a primitive, and p*-def,
-;; syntax representing the definition of its reverse transformation,
-;; lifts p*-def and returns the lifted identifier.  In addition,
-;; p*-def is itself reverse transformed, and registered as the
-;; primitive definition of the lifted identifier.
-(define (introduce-prim-def! p p*-def)
-  (let ([p*-lifted (syntax-local-lift-expression p*-def)])
-    (dict-set! prim->backprop-intro p p*-lifted)
-    (set-prim-definition! p*-lifted
-                          (reverse-transform
-                           (anf-outer-binding
-                            (anf-expand-expression p*-def))))
-    p*-lifted))
-
-;; reverse-tag : (listof identifier?) identifier? -> identifier?
-(define (reverse-tag id)
-  (dict-ref prim->backprop-intro id
-            (λ ()
-              (cond
-                [(get-prim-definition id) => (curry introduce-prim-def! id)]
-                [else (tagged id)]))))
 
 ;; Note: takes a 'let-values' style binding, and produces a binding
 ;; form for sum-destructuring-let (sheds one level of parens around

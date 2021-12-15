@@ -24,7 +24,7 @@
      (reverse-transform #'expr*)]
 
     ;; If not an identifier or a lambda expression, assume that it is
-    ;; a function and wrap in a lambda
+    ;; a function and eta expand
     [(_ expr)
     (reverse-transform
      (anf-outer-binding
@@ -33,7 +33,6 @@
 (define-syntax D+
   (syntax-parser
     [(_ expr)
-     ;; figure out arity/formals of expr (which must be a function)
      #'(λ xs
          (let* ([D+f (lift/D+ expr)]
                 [primal+backprop (apply D+f xs)]
@@ -46,20 +45,19 @@
                  (cdr ((backprop primal+backprop) Aw Abox))
                  xs)))))]))
 
-(define-syntax directional-grad
+(define-syntax grad/sensitivity
   (syntax-parser
-    [(_ expr dirn)
-     ;; figure out arity/formals of expr (which must be a function)
+    [(_ expr result-sensitivity)
      #'(λ xs
          (let* ([D+f (lift/D+ expr)]
                 [<-f (backprop (apply D+f xs))]
                 [Abox (make-hasheq)])
-             (coerce-zero (cdr (<-f dirn Abox)) xs)))]))
+             (coerce-zero (cdr (<-f result-sensitivity Abox)) xs)))]))
 
 (define-syntax grad
   (syntax-parser
-    [(_ expr) #'(directional-grad expr 1.0)]
-    [(_ expr dirn) #'(directional-grad expr dirn)]))
+    [(_ expr) #'(grad/sensitivity expr 1.0)]
+    [(_ expr result-sensitivity) #'(grad/sensitivity expr result-sensitivity)]))
 
 
 ;; (define-syntax (define/backprop stx)
