@@ -393,8 +393,7 @@
      #:with t (generate-temporary)
      #:with body (k #'t)
      #'(let-values (((t) c))
-         body)]
-    ))
+         body)]))
 
 (define (anf2-normalize stx)
   (anf1->2 (anf1-normalize stx)))
@@ -515,8 +514,7 @@
 
      #:fail-unless (and (identifier? #'x-result-final)
                         (free-identifier=? #'x-result-arg #'x-result-final))
-     "Result of anf-normalize had an unexpected form"
-
+                   "Result of anf-normalize had an unexpected form"
      #'e*]
 
     [other #f]))
