@@ -2,6 +2,7 @@
 
 (require "apply.rkt"
          "primitives.rkt"
+         "prim-definition.rkt"
          (for-syntax (except-in racket/base apply)
                      syntax/parse
                      "anf.rkt"
@@ -61,32 +62,29 @@
     [(_ expr result-sensitivity) #'(grad/sensitivity expr result-sensitivity)]))
 
 
-;; (define-syntax (define/backprop stx)
-;;   (syntax-parse stx
-;;     ;; TODO formals
-;;     [(_ (f xs ...) body ...)
-;;      #:with (xs* ...) (generate-temporaries #'(xs ...))
-;;      #:with D*f (local-expand #'(D* (λ (xs* ...) (define (f xs ...) body ...) (f xs* ...)))
-;;                               'expression
-;;                               #f)
-;;      #'(begin
-;;          (define (f xs ...) body ...)
-;;          (local-register-primitive! f D*f))]
+(define-syntax (define/backprop stx)
+  (syntax-parse stx
+    [(_ (f xs ...) body ...)
+     #:with (xs* ...) (generate-temporaries #'(xs ...))
+     #'(begin
+         (define (f xs ...) body ...)
+         (local-register-primitive!
+          f
+          (lift/D+ (λ (xs* ...)
+                     (define (f xs ...) body ...)
+                     (f xs* ...)))))]
 
-;;     ;; [(_ (f . xs) body ...)
-;;     ;;  #:with xs* (generate-temporaries #'xs)
-;;     ;;  #:with D*f (local-expand #'(D* (λ xs* (define (f . xs) body ...) (apply f xs*)))
-;;     ;;                           'expression
-;;     ;;                           #f)
-;;     ;;  #'(begin
-;;     ;;      (define (f . xs) body ...)
-;;     ;;      (local-register-primitive! f D*f))]
+    [(_ (f xs ... . xn) body ...)
+     #:with (xs* ... xn*) (generate-temporaries #'(xs ... xn))
+     #'(begin
+         (define (f xs ... . xn) body ...)
+         (local-register-primitive!
+          f
+          (lift/D+ (λ (xs* ... . xn*)
+                     (define (f xs ... . xn) body ...)
+                     (apply f xs* ... xn*)))))]
 
-;;     ;; [(_ f body ...)
-;;     ;;  #:with D*f (local-expand #'(D* (λ xs (define f body ...) (apply f xs)))
-;;     ;;                           'expression
-;;     ;;                           #f)
-;;     ;;  #'(begin
-;;     ;;      (define f body ...)
-;;     ;;      (local-register-primitive! f D*f))]
-;;     ))
+    [(_ f expr)
+     #'(begin
+         (define f expr)
+         (local-register-primitive! f (lift/D+ (λ xs (apply expr xs)))))]))
