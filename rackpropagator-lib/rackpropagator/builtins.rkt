@@ -15,6 +15,7 @@
          coerce-zero
          car0
          cdr0
+         foldl0
          unbox0
          add
          scale)
@@ -58,6 +59,12 @@
 
 (define (unbox0 a) ((lift-zero unbox) a))
 
+(define (foldl0 f z xs)
+  (if (or (null? xs) (gen-zero? xs))
+      z
+      (foldl0 f (f z (car xs)) (cdr xs))))
+
+
 ;; (define (zero? a)
 ;;   (equal? a (zero a)))
 
@@ -91,19 +98,33 @@
   (cond
     [(procedure? p)
      (λ xs (strip-backprop (apply p (map strip-backprop xs))))]
-    [(proc-result? p) (proc-result-primal p)]
+    [(proc-result? p) (proc-result-primal0 p)]
     [else p]))
 
+;; (define (unknown-backprop op op-name)
+;;   (let ([op* (strip-backprop op)])
+;;          (if (procedure? op*)
+;;              (λ xs
+;;                (make-proc-result
+;;                 (apply op* xs)
+;;                 (λ (Aw Abox)
+;;                   (if (gen-zero? Aw)
+;;                       Aw
+;;                       (raise-arguments-error 'prim-definition
+;;                                              "Backpropagator unknown"
+;;                                              "op" op-name)))))
+;;              op)))
+
 (define (unknown-backprop op op-name)
-  (let ([op* (strip-backprop op)])
-         (if (procedure? op*)
-             (λ xs
-               (make-proc-result
-                (apply op* xs)
-                (λ (Aw Abox)
-                  (if (gen-zero? Aw)
-                      Aw
-                      (raise-arguments-error 'prim-definition
-                                             "Backpropagator unknown"
-                                             "op" op-name)))))
-             op)))
+  (if (procedure? op)
+      (λ xs
+        (let ([result (apply op xs)])
+          (make-proc-result
+           (if (proc-result? result) (proc-result-primal result) result)
+           (λ (Aw Abox)
+             (if (gen-zero? Aw)
+                 Aw
+                 (raise-arguments-error 'prim-definition
+                                        "Backpropagator unknown"
+                                        "op" op-name))))))
+        op))

@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require "apply.rkt"
-         "primitives.rkt"
+         "builtins.rkt"
          "prim-definition.rkt"
          (for-syntax (except-in racket/base apply)
                      syntax/parse
@@ -13,13 +13,14 @@
 (provide lift/D+
          D+
          grad
-         (rename-out [grad ∇]))
+         (rename-out [grad ∇])
+         define/D+)
 
 (define-syntax lift/D+
   (syntax-parser
-    [(_ prim:id) (reverse-transform #'prim)]
+    ;; [(_ prim:id) (reverse-transform #'prim)]
 
-    ;; When expr is a lambda expression anf-outer-binding succeeds (non-#f)
+    ;; When expr is a lambda expression, anf-outer-binding succeeds (non-#f)
     [(_ expr)
      #:attr expr* (anf-outer-binding (anf-expand-expression #'expr))
      #:when (attribute expr*)
@@ -61,8 +62,7 @@
     [(_ expr) #'(grad/sensitivity expr 1.0)]
     [(_ expr result-sensitivity) #'(grad/sensitivity expr result-sensitivity)]))
 
-
-(define-syntax (define/backprop stx)
+(define-syntax (define/D+ stx)
   (syntax-parse stx
     [(_ (f xs ...) body ...)
      #:with (xs* ...) (generate-temporaries #'(xs ...))

@@ -14,7 +14,7 @@ to be computed:
 @racketblock[
 (require rackpropagator)
 
-(D+ (lambda (x) (* x x)))
+(D+ (λ (x) (* x x)))
 ]
 
 Rackpropagator provides reverse mode automatic differentiation
@@ -35,8 +35,33 @@ Derivatives of functions that close over variables behave as expected,
 as does mutation.
 
 @racketblock[
-  (define/backprop (f x)
+  (define/D+ (f x)
     (* x x))]
+
+@examples[#:eval the-eval
+  (define/D+ (f x)
+    (* x x))
+
+  (f 10.0)
+
+  ((grad f) 10.0)]
+
+Alternatively, @racket[grad] has an alias, @racket[∇]:
+
+@examples[#:eval the-eval
+ ((∇ f) 10.0)]
+
+@examples[#:eval the-eval
+  (define/D+ (pow x n)
+    (if (= n 0)
+        1.0
+        (* x (pow x (- n 1)))))
+
+  ((grad (grad pow) '(1.0)) 2.0 3)]
+
+
+  
+
 
 The system is @italic{extensible}: While a number of differentiable
 `primitives' are pre-defined, it is possible to register new ones.

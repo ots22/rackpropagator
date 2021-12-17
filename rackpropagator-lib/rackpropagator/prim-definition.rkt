@@ -4,7 +4,8 @@
          syntax/parse/define
          "builtins.rkt"
          "apply.rkt"
-         (for-syntax racket/base
+         (for-syntax (except-in racket/base apply)
+                     "apply.rkt"
                      racket/dict
                      racket/provide-transform
                      racket/splicing
@@ -16,7 +17,8 @@
          backprop-out
          require/primal+backprop
          require/backprop
-         (for-syntax get-prim-definition
+         (for-syntax prim-spec
+                     get-prim-definition
                      set-prim-definition!))
 
 

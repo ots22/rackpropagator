@@ -36,39 +36,6 @@
 (define reversed (id-modifier "" "*"))
 
 ;; ----------------------------------------
-;; State: identifiers of introduced reverse-transformed primitives
-
-(define prim->reverse-intro (make-free-id-table))
-
-;; introduce-prim-def! identifier? syntax? -> identifier?
-;;
-;; Given p, an identifier representing a primitive, and p*-def,
-;; syntax representing the definition of its reverse transformation,
-;; lifts p*-def and returns the lifted identifier.  In addition,
-;; p*-def is itself reverse transformed, and registered as the
-;; primitive definition of the lifted identifier.
-(define (introduce-prim-def! p p*-def)
-  (let ([p*-lifted (syntax-local-lift-expression p*-def)])
-    (dict-set! prim->reverse-intro p p*-lifted)
-    (set-prim-definition! p*-lifted
-                          (reverse-transform
-                           (anf-outer-binding
-                            (anf-expand-expression p*-def))))
-    p*-lifted))
-
-;; get-reversed : (listof identifier?) identifier? -> identifier?
-;;
-;; Look up the 'reversed' name of id: it is either a simple renaming
-;; with reversed, or if id is a primitive, it is the name of the
-;; introduced primitive definition.
-(define (get-reversed id)
-  (dict-ref prim->reverse-intro id
-            (λ ()
-              (cond
-                [(get-prim-definition id) => (curry introduce-prim-def! id)]
-                [else (reversed id)]))))
-
-;; ----------------------------------------
 ;; Syntax classes
 
 (define-syntax-class id/backprop-ids
@@ -76,7 +43,7 @@
            #:attr sensitivity (sensitivity #'x)
            #:attr backprop (backpropagator #'x)
            #:attr dummy (dummy #'x)
-           #:attr reversed (get-reversed #'x)))
+           #:attr reversed (reversed #'x)))
 
 (define-syntax-class lambda-formals/backprop-ids
   (pattern (x:id/backprop-ids ...)
@@ -117,22 +84,28 @@
                          [lhs id/backprop-ids])
     #:literal-sets (kernel-literals)
     [((lhs) c)
-     #'(lhs.reversed c)]
+     (list #'(lhs.reversed c))]
 
     [((lhs) x)
-     #'(lhs.reversed x.reversed)]
+     (define prims (filter get-prim-definition (list #'x)))
+     (cons #'(lhs.reversed x.reversed)
+           prims)]
 
     [((lhs) (#%plain-lambda formals M))
      #:with (x-free ...) (free-vars #'(#%plain-lambda formals M))
      #:with transformed-expr (reverse-transform #'(#%plain-lambda formals M) bound-ids)
-     #'(lhs.reversed transformed-expr)]
+     (list #'(lhs.reversed transformed-expr))]
 
     [((lhs) (#%plain-app x0 xs ...))
-     #'((proc-result lhs.reversed lhs.backprop) (x0.reversed xs.reversed ...))]
+     (define prims (filter get-prim-definition (syntax-e #'(x0 xs ...))))
+     (cons #'((proc-result lhs.reversed lhs.backprop) (x0.reversed xs.reversed ...))
+           prims)]
 
     [((lhs) (if x-test (#%plain-app x-true) (#%plain-app x-false)))
-     #'((proc-result lhs.reversed lhs.backprop)
-        (if x-test.reversed (x-true.reversed) (x-false.reversed)))]))
+     (define prims (filter get-prim-definition (list #'x-test #'x-true #'x-false)))
+     (cons #'((proc-result lhs.reversed lhs.backprop)
+              (if x-test.reversed (x-true.reversed) (x-false.reversed)))
+           prims)]))
 
 (define (ρ b box-sensitivities)
   (syntax-parse b
@@ -185,10 +158,9 @@
   (syntax-parse f
     #:conventions (anf-convention)
     #:local-conventions ([#rx"^x" id/backprop-ids]
+                         [prim-dedup id/backprop-ids]
                          [formals lambda-formals/backprop-ids])
     #:literal-sets (kernel-literals)
-
-    [prim:id/backprop-ids #'prim.reversed]
 
     [{~and lam (#%plain-lambda formals body:nested-let-values)}
      #:with (B ...) #'(body.bindings ...)
@@ -201,27 +173,35 @@
                                       (syntax->list #'(formals.vars ...))
                                       (syntax->list #'(x ...))))]
 
-     #:with (primal-bindings ...)
+     #:with ((primal-bindings prim ...) ...)
      (map (curryr ϕ bound-ids*) (syntax-e #'(B ...)))
+
+     #:with (prim-dedup ...) (remove-duplicates (syntax-e #'(prim ... ...))
+                                                free-identifier=?)
+     
+     #:with (prim-def ...) (map get-prim-definition (syntax-e #'(prim-dedup ...)))
 
      #:with (backprop-bindings ...)
      (map (curryr ρ #'box-sensitivities) (reverse (syntax-e #'(B ...))))
 
      #:with (x-unknown ...)
-     (append-map (curryr unknown-transform bound-ids*) (syntax-e #'(B ...)))
+     (remove-duplicates 
+      (append-map (curryr unknown-transform bound-ids*) (syntax-e #'(B ...)))
+      free-identifier=?)
 
      #'(λ formals.reversed
-         (destructuring-sum-let*
-          ([x-unknown.reversed (unknown-backprop x-unknown 'x-unknown)] ...
-            primal-bindings ...)
-           (proc-result
-            result.reversed
-            (λ (result.dummy box-sensitivities)
-              (destructuring-sum-let*
-                  ([result.sensitivity result.dummy]
-                   [x-free.sensitivity (gen-zero)] ...
-                   [formals.sensitivity-vars (gen-zero)] ...
-                   [x.sensitivity (gen-zero)] ...
-                   backprop-bindings ...)
-                (list* (list x-free.sensitivity ...)
-                       formals.sensitivity-result ...))))))]))
+         (let ([x-unknown.reversed (unknown-backprop x-unknown 'x-unknown)] ...
+               [prim-dedup.reversed prim-def] ...)
+          (destructuring-sum-let* (primal-bindings ...)
+            (proc-result
+             result.reversed
+             (λ (result.dummy box-sensitivities)
+               (destructuring-sum-let*
+                   ([result.sensitivity result.dummy]
+                    [x-free.sensitivity (gen-zero)] ...
+                    [formals.sensitivity-vars (gen-zero)] ...
+                    [x.sensitivity (gen-zero)] ...
+                    backprop-bindings ...)
+                 (list* (list x-free.sensitivity ...)
+                        formals.sensitivity-result ...)))))))]))
+ 

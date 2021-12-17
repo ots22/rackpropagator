@@ -5,14 +5,34 @@
          racket/unsafe/ops
          "apply.rkt"
          "builtins.rkt"
-         "prim-definition.rkt")
+         "derivative.rkt"
+         "prim-definition.rkt"
+         syntax/parse/define
+         (for-syntax racket/base
+                     racket/syntax))
 
-(provide (backprop-out + - * sub1 cons car cdr cadr list list* identity
-                       make-list > < = length equal? make-hasheq unbox set-box!
-                       box map unsafe-car unsafe-cdr apply add scale car0 cdr0
-                       proc-result primal backprop gen-zero coerce-zero)
+;; Helper for defining and providing backpropagator forms
+;;
+;; f-spec (e.g. (f xs ...)) should refer to an existing binding, and
+;; the provided definition should be equivalent to the existing
+;; definition. The definition is used to produce a reverse-transformed
+;; definition, which is attached to the original binding.  This avoids
+;; the need to hand-code a backpropagator, but still permits attaching
+;; it to an existing binding (unlike define/D+, which produces a new
+;; binding).
+(define-syntax-parse-rule (define+provide-backprop-for f-spec:prim-spec
+                            body ...)
+  #:with f-prim (generate-temporary #'f-spec.prim-id)
+  (begin
+    (define/D+ (f-prim . f-spec.vars)
+      (define f-spec body ...)
+      f-spec.appl)
+    (local-register-primitive! f-spec.prim-id (lift/D+ f-prim))
+    (provide (backprop-out f-prim f-spec.prim-id))))
+  
 
-         foldl0)
+(provide (backprop-out + - * sub1 cons car cdr list identity log make-list
+                       > < = length null? equal? make-hasheq unbox set-box!))
 
 (require/backprop
  racket
@@ -30,6 +50,9 @@
  [(* x y)
   (λ (Aw Abox) (list '() (scale Aw y) (scale Aw x)))]
 
+ [(log x)
+  (λ (Aw Abox) (list '() (scale Aw (/ 1.0 x))))]
+ 
  [(sub1 x)
   (λ (Aw Abox) (list '() 1.0))]
 
@@ -42,25 +65,11 @@
  [(cdr xs)
   (λ (Aw Abox) (list '() (cons (gen-zero) Aw)))]
 
- [(cadr xs)
-  (λ (Aw Abox) (list '() (cons (gen-zero) (cons Aw (gen-zero)))))]
-
  [(list . xs)
   (λ (Aw Abox) (cons '() Aw))]
 
- ;; TODO fix (no multiple values/split-at)
- [(list* . xs)
-  (λ (Aw Abox)
-    (cons '()
-          (call-with-values
-           (λ () (split-at Aw (sub1 (length xs))))
-           (λ (head tail) (append head (list tail))))))]
-
  [(identity x)
   (λ (Aw Abox) (list '() Aw))]
-
- ;; TODO
- ;; foldl/foldl0
 
  [(make-list n x)
   (λ (Aw Abox) (list '() 0 (foldl0 add (gen-zero) Aw)))]
@@ -73,6 +82,9 @@
 
  [(= . xs)
   (λ (Aw Abox) (cons '() (make-list (length xs) (gen-zero))))]
+
+ [(null? x)
+  (λ (Aw Abox) (cons '() (gen-zero)))]
 
  [(length lst)
   (λ (Aw Abox) (list '() (gen-zero)))]
@@ -90,7 +102,6 @@
       (list '() (gen-zero))))]
 
  [(set-box! b x)
-  ;; Aw should be (void), and the unused
   (λ (Aw Abox)
     (let* ([Ab (hash-ref! Abox b (box (gen-zero)))]
            [Ax (unbox Ab)])
@@ -98,8 +109,18 @@
       (list '() (gen-zero) Ax)))])
 
 
+(provide (backprop-out box exp))
+
 (require/primal+backprop
  racket/base
+ [exp
+  (λ (x)
+    (let ([exp-x (exp x)])
+      (proc-result
+       exp-x
+       (λ (Aw Abox)
+         (list '() (scale Aw exp-x))))))]
+ 
  [box
   (λ (x)
     (let ([b (box x)])
@@ -110,25 +131,10 @@
          (let* ([Ab (hash-ref! Abox b (box (gen-zero)))]
                 [Ax (unbox Ab)])
            (set-box! Ab (gen-zero))
-           (list '() Ax))))))]
+           (list '() Ax))))))])
 
- [map
-  (λ (f . xs)
-    (let* ([p+bs (apply map f xs)]
-           [ps (map primal p+bs)]
-           [bs (map backprop p+bs)])
-      (proc-result
-       ps
-       (λ (Aw Abox)
-         (let* ([^f+xs (map (λ (b Aw) (b Aw Abox)) bs Aw)]
-                [^fs (map car ^f+xs)]
-                ;; list with same length as each element of xs
-                [^xs (map cdr ^f+xs)]
-                ;; 'transpose': list of same length as xs
-                [^xs* (apply map list ^xs)]
-                [^f (foldl0 add (gen-zero) ^fs)])
-           (list* '() ^f ^xs*))))))])
 
+(provide (backprop-out unsafe-car unsafe-cdr))
 
 (require/backprop
  racket/unsafe/ops
@@ -138,6 +144,8 @@
  [(unsafe-cdr xs)
   (λ (Aw Abox) (list '() (cons (gen-zero) Aw)))])
 
+
+(provide (backprop-out apply))
 
 (require/primal+backprop
  "apply.rkt"
@@ -156,6 +164,9 @@
                             [tail (drop ^args n-1)])
                        (list* '() ^f (append head (list tail))))))))])
 
+
+(provide (backprop-out add scale car0 cdr0 proc-result primal backprop gen-zero
+                       coerce-zero))
 
 (require/backprop
  "builtins.rkt"
@@ -187,7 +198,59 @@
   (λ (Aw Abox) (list '() Aw (gen-zero)))])
 
 
-(define (foldl0 f x0 xs)
+(define+provide-backprop-for (caar lst) (car (car lst)))
+
+(define+provide-backprop-for (cadr lst) (car (cdr lst)))
+
+(define+provide-backprop-for (cdar lst) (cdr (car lst)))
+
+(define+provide-backprop-for (foldl0 f z xs)
   (if (or (null? xs) (gen-zero? xs))
-      x0
-      (foldl0 f (f x0 (car xs)) (cdr xs))))
+      z
+      (foldl0 f (f z (car xs)) (cdr xs))))
+
+(define+provide-backprop-for (foldl f z xs)
+  (if (null? xs)
+      z
+      (foldl f (f z (car xs)) (cdr xs))))
+
+(define+provide-backprop-for (list* x . xs)
+  (if (null? xs)
+      x
+      (cons x (apply list* xs))))
+
+(define/D+ (map1 f xs)
+  (if (null? xs)
+      '()
+      (cons (f (car xs)) (map1 f (cdr xs)))))
+
+(define+provide-backprop-for (map f xs . xs*)
+  (if (null? xs)
+      '()
+      (cons (apply f (car xs) (map1 car xs*))
+            (apply map f (cdr xs) (map1 cdr xs*)))))
+
+(define+provide-backprop-for (append . xs)
+  (define (rec acc . xs)
+    (cond
+      [(null? xs) (reverse acc)]
+      [(null? (car xs)) (apply rec acc (cdr xs))]
+      [else (apply rec (cons (caar xs) acc) (cdar xs) (cdr xs))]))
+  (apply rec '() xs))
+
+(define+provide-backprop-for (reverse xs)
+  (define (rec acc xs)
+    (if (null? xs)
+        acc
+        (rec (cons (car xs) acc) (cdr xs))))
+  (rec '() xs))
+
+(define+provide-backprop-for (drop xs n)
+  (if (= n 0)
+      xs
+      (drop (cdr xs) (sub1 n))))
+
+(define+provide-backprop-for (take xs n)
+  (if (= n 0)
+      '()
+      (cons (car xs) (take (cdr xs) (sub1 n)))))
