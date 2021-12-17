@@ -1,6 +1,8 @@
 #lang racket/base
 
-;; Primitives available to user code: generic zero and addition
+(require racket/generic
+         racket/vector
+         math/array)
 
 (provide (rename-out [make-gen-zero gen-zero]
                      [make-proc-result proc-result]
@@ -16,76 +18,9 @@
          car0
          cdr0
          foldl0
-         unbox0
          add
          scale)
 
-(define (zero a)
-  (cond
-    [(null? a) null]
-    [(pair? a) (cons (zero (car a)) (zero (cdr a)))]
-    [(proc-result? a) (make-proc-result (zero (proc-result-primal0 a))
-                                        (zero (proc-result-backprop0 a)))]
-    [(gen-zero? a) (make-gen-zero)]
-    [else 0.0]))
-
-(define ((lift-zero f) x) (if (gen-zero? x)
-                              (make-gen-zero)
-                              (f x)))
-
-(struct gen-zero ()
-  #:constructor-name make-gen-zero)
-
-;; Walk a, and if it contains a gen-zero, coerce this to have a
-;; conforming shape to b
-;;
-;; coerce-zero : pair? pair? -> pair?
-
-;; TODO better error message for non-conforming a and b
-(define (coerce-zero a b)
-  (cond
-    [(gen-zero? a) (zero b)]
-    [(pair? a) (cons (coerce-zero (car a) (car b))
-                     (coerce-zero (cdr a) (cdr b)))]
-    [(proc-result? a)
-     (make-proc-result
-      (coerce-zero (proc-result-primal0 a) (proc-result-primal0 b))
-      (coerce-zero (proc-result-backprop0 a) (proc-result-backprop0 b)))]
-
-    [else a]))
-
-(define (car0 a) ((lift-zero car) a))
-(define (cdr0 a) ((lift-zero cdr) a))
-
-(define (unbox0 a) ((lift-zero unbox) a))
-
-(define (foldl0 f z xs)
-  (if (or (null? xs) (gen-zero? xs))
-      z
-      (foldl0 f (f z (car xs)) (cdr xs))))
-
-
-;; (define (zero? a)
-;;   (equal? a (zero a)))
-
-(define (add a b)
-  (cond
-    [(gen-zero? a) b]
-    [(gen-zero? b) a]
-    [(and (null? a) (null? b)) null]
-    [(pair? a) (cons (add (car a) (car b))
-                     (add (cdr a) (cdr b)))]
-    [(proc-result? a)
-     (make-proc-result
-      (add (proc-result-primal0 a) (proc-result-primal0 b))
-      (add (proc-result-backprop0 a) (proc-result-backprop0 b)))]
-
-    [else (+ a b)]))
-
-(define (scale a b)
-  (cond
-    [(or (gen-zero? a) (gen-zero? b)) (make-gen-zero)]
-    [else (* a b)]))
 
 (struct proc-result (primal backprop)
   #:transparent
@@ -93,6 +28,101 @@
 
 (define (proc-result-primal0 x) ((lift-zero proc-result-primal) x))
 (define (proc-result-backprop0 x) ((lift-zero proc-result-backprop) x))
+
+
+(struct gen-zero () #:constructor-name make-gen-zero)
+
+(define (zero v) (scale v (make-gen-zero)))
+
+
+(define ((lift-zero f) x)
+  (if (gen-zero? x)
+      (make-gen-zero)
+      (f x)))
+
+(define (car0 a) ((lift-zero car) a))
+(define (cdr0 a) ((lift-zero cdr) a))
+
+(define (foldl0 f z xs)
+  (if (or (null? xs) (gen-zero? xs))
+      z
+      (foldl0 f (f z (car xs)) (cdr xs))))
+
+
+(define-generics linear
+  (add linear other)
+  (scale linear num)
+
+  ;; coerce the first argument to be a member of the space of the
+  ;; second (from a structure that may contain gen-zero)
+  (coerce-zero linear other)
+
+  #:fast-defaults
+  ([number?
+    (define (add u v) (if (gen-zero? v) u (+ u v)))
+    (define (scale u a) (if (gen-zero? a) 0.0 (* a u)))
+    (define (coerce-zero u v) u)]
+
+   [gen-zero?
+    (define (add u v) v)
+    (define (scale u a) (make-gen-zero))
+    (define (coerce-zero u v) (zero v))]
+
+   [null?
+    (define (add u v) null)
+    (define (scale u a) null)
+    (define (coerce-zero u v) null)]
+
+   [pair?
+    (define/generic super-add add)
+    (define/generic super-scale scale)
+    (define/generic super-coerce-zero coerce-zero)
+    (define (add u v)
+      (cons (super-add (car u) (car0 v))
+            (super-add (cdr u) (cdr0 v))))
+    (define (scale u a)
+      (cons (super-scale (car u) a)
+            (super-scale (cdr u) a)))
+    (define (coerce-zero u v)
+      (cons (super-coerce-zero (car u) (car0 v))
+            (super-coerce-zero (cdr u) (cdr0 v))))]
+
+   [vector?
+    (define/generic super-add add)
+    (define/generic super-scale scale)
+    (define/generic super-coerce-zero coerce-zero)
+    (define (add u v) (vector-map super-add u v))
+    (define (scale u a) (vector-map (λ (x) (super-scale x a)) u))
+    (define (coerce-zero u v) (vector-map super-coerce-zero u v))]
+
+   [array?
+    (define/generic super-add add)
+    (define/generic super-scale scale)
+    (define/generic super-coerce-zero coerce-zero)
+    (define (add u v) (array-map super-add u v))
+    (define (scale u a) (array-map (λ (x) (super-scale x a)) u))
+    (define (coerce-zero u a) (array-map super-coerce-zero u))]
+
+   [proc-result?
+    (define/generic super-add add)
+    (define/generic super-scale scale)
+    (define/generic super-coerce-zero coerce-zero)
+    (define (add u v)
+      (make-proc-result (super-add (proc-result-primal u)
+                                   (proc-result-primal0 v))
+                        (super-add (proc-result-backprop u)
+                                   (proc-result-backprop0 v))))
+    (define (scale u a)
+      (make-proc-result (super-scale (proc-result-primal u) a)
+                        (super-scale (proc-result-backprop u) a)))
+    (define (coerce-zero u v)
+      (make-proc-result (super-coerce-zero (proc-result-primal u)
+                                           (proc-result-primal0 v))
+                        (super-coerce-zero (proc-result-backprop u)
+                                           (proc-result-backprop0 v))))]))
+
+
+;; ----------------------------------------
 
 (define (strip-backprop p)
   (cond

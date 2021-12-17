@@ -109,6 +109,20 @@
       (list '() (gen-zero) Ax)))])
 
 
+(provide (backprop-out vector vector->list list->vector))
+
+(require/backprop
+ racket/base
+ [(vector . xs)
+  (λ (Aw Abox) (list '() (vector->list Aw)))]
+
+ [(vector->list v)
+  (λ (Aw Abox) (list '() (list->vector Aw)))]
+
+ [(list->vector lst)
+  (λ (Aw Abox) (list '() (vector->list Aw)))])
+
+
 (provide (backprop-out box exp))
 
 (require/primal+backprop
@@ -219,12 +233,11 @@
       x
       (cons x (apply list* xs))))
 
+(provide (backprop-out map1))
 (define/D+ (map1 f xs)
   (if (null? xs)
       '()
       (cons (f (car xs)) (map1 f (cdr xs)))))
-
-(provide (backprop-out map1))
 
 (define+provide-backprop-for (map f xs . xs*)
   (if (null? xs)
