@@ -224,6 +224,8 @@
       '()
       (cons (f (car xs)) (map1 f (cdr xs)))))
 
+(provide (backprop-out map1))
+
 (define+provide-backprop-for (map f xs . xs*)
   (if (null? xs)
       '()
