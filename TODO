@@ -1,29 +1,10 @@
 TODO
 
-* Renaming - be consistent about:
-  - reverse transform
-  - backprop
-  - primitive
-  - primal
-  - adjoint
-  - pullback
-  - derivative/gradient?/D/nabla
-  - Jacobian/J
-  - 'tagged' in the reverse-transform source
-    (slightly misleading perhaps, but consistant with Pearlmutter)
-
-* Interface
-  - D+ (sugared, sets all the syntax parameters, filters the closure vars out)
-  - D* (plain)
-  - define/backprop
-  - grad
-  - explicit closure vars can be passed to D+/D* by the user
-  - make (D+ f) work as well as (D+ (lambda (x) (f x))) [should just look up the backpropagator for primitives]
-  - better names for the above too
-
 * Use generic collections ('linear' interface)
 
 * Robustness
+  - E.g. if (provide (backprop-out map1)) is missing from primitives.rkt,
+    the resulting error is confusing
   - better error messages (macros/syntax)
   - 'lists' passed to backpropagators might have a tail of (gen-zero) (== null)
     - make sure this case is handled
@@ -32,11 +13,8 @@ TODO
   - Don't include free-vars in closure variable sensitivities (works, but could blow up quickly)
 
 * Additional backpropagators
-  - define some of these with define/backprop
-  - foldl/foldl0 (definition with define/backprop now works)
   - math/array
   - hash tables (second derivative of)
-  - list* without split-at
   - */multiply with more than two args
 
 * Optimizations
