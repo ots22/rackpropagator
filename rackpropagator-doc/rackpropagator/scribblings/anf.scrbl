@@ -57,7 +57,7 @@
 ]
 
 ANF2 has a more restricted grammar than ANF1:
-@itemize[
+@itemlist[
 @item{The form in tail position can only be an identifier}
 @item{All function applications are made in a @racket[let-values] binding (no explicit tail calls)}
 @item{Function application and @racket[if] only use identifiers}

@@ -5,6 +5,8 @@ TODO
     work for interactive)
   - sometimes want to define a plain function and attach derivative information
     (e.g. matrices)
+  - define/backprop (vs define/D+)
+  - separate rackpropagator/matrix (separate package?)
 
 * Robustness
   - E.g. if (provide (backprop-out map1)) is missing from primitives.rkt,
