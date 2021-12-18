@@ -19,14 +19,6 @@ The low-level facility for registering primitives is given by
 which should be avoided in user code.
 
 
-@; current-box-adjoints
-@; local-register-primitive!
-@; register-primitive!
-@; prim-definition
-@; backprop-out
-@; require/backprop
-
-
 @defform[(local-register-primitive! prim-id prim-augmented-def)]{
 
 Register @racket[prim-id] as a primitive for the current compilation unit.

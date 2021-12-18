@@ -2,9 +2,10 @@
 
 (require scribble/eval
          scriblib/autobib
-         (for-label racket
+         (for-label (except-in racket apply)
                     rackpropagator
-                    rackpropagator/anf))
+                    rackpropagator/anf)
+         "bibliography.rkt")
 
 (provide (all-defined-out)
          (all-from-out scribble/eval
@@ -15,7 +16,8 @@
          generate-bibliography
          (for-label (all-from-out racket
                                   rackpropagator
-                                  rackpropagator/anf)))
+                                  rackpropagator/anf))
+         (all-from-out "bibliography.rkt"))
 
 (define the-eval (make-base-eval))
 (the-eval '(require rackpropagator))

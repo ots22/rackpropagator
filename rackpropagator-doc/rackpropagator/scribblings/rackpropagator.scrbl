@@ -85,6 +85,8 @@ is available.
 
 Racket is fun @~cite[plt-tr1].
 
-@(require "bibliography.rkt")
+@~cite[elliot2018]
+
+@~cite[pearlmutter2008]
 
 @(generate-bibliography)

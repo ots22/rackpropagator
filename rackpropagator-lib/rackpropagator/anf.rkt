@@ -39,10 +39,6 @@
 ;; ----------------------------------------
 ;; Conventions and syntax classes
 
-(define-literal-set anf-literals
-  #:literal-sets (kernel-literals)
-  ())
-
 (define-syntax-class lambda-formals
   (pattern (x:id ...)
            #:attr vars #'(x ...))
@@ -116,7 +112,7 @@
 ;;
 ;; Note that compared to ANF1:
 ;;  - The value in 'return' position can be only a named variable
-;;  - all function applications are mode in a let-values binding (no tail calls)
+;;  - all function applications are made in a let-values binding (no tail calls)
 ;;  - function applications involve named variables only
 
 ;; V*

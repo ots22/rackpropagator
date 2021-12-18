@@ -323,7 +323,6 @@
        invM
        (λ (Aw Abox)
          (let ([invMT (matrix-transpose invM)])
-           (list '()
-                 (matrix-scale
-                  (matrix* (matrix* invMT Aw) invMT)
-                  -1)))))))])
+           (list '() (matrix-scale (matrix* (matrix* invMT Aw) invMT)
+                                   -1)))))))])
+
