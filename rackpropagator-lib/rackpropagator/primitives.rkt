@@ -3,6 +3,7 @@
 (require racket/list
          racket/function
          racket/unsafe/ops
+         "matrix.rkt"
          "apply.rkt"
          "builtins.rkt"
          "derivative.rkt"
@@ -10,6 +11,7 @@
          syntax/parse/define
          (for-syntax racket/base
                      racket/syntax))
+
 
 ;; Helper for defining and providing backpropagator forms
 ;;
@@ -29,7 +31,7 @@
       f-spec.appl)
     (local-register-primitive! f-spec.prim-id (lift/D+ f-prim))
     (provide (backprop-out f-prim f-spec.prim-id))))
-  
+
 
 (provide (backprop-out + - * sub1 cons car cdr list identity log make-list
                        > < = length null? equal? make-hasheq unbox set-box!))
@@ -52,7 +54,7 @@
 
  [(log x)
   (λ (Aw Abox) (list '() (scale Aw (/ 1.0 x))))]
- 
+
  [(sub1 x)
   (λ (Aw Abox) (list '() 1.0))]
 
@@ -123,7 +125,7 @@
   (λ (Aw Abox) (list '() (vector->list Aw)))])
 
 
-(provide (backprop-out box exp))
+(provide (backprop-out box exp build-list))
 
 (require/primal+backprop
  racket/base
@@ -134,7 +136,7 @@
        exp-x
        (λ (Aw Abox)
          (list '() (scale Aw exp-x))))))]
- 
+
  [box
   (λ (x)
     (let ([b (box x)])
@@ -145,7 +147,17 @@
          (let* ([Ab (hash-ref! Abox b (box (gen-zero)))]
                 [Ax (unbox Ab)])
            (set-box! Ab (gen-zero))
-           (list '() Ax))))))])
+           (list '() Ax))))))]
+
+ [build-list
+  (λ (n proc)
+    (let [(xs* (build-list n proc))]
+      (proc-result
+       (map primal xs*)
+       (λ (Aws Abox)
+         (list '() 0
+               (foldl0 add (gen-zero)
+                       (map (λ (x* Aw) (car ((backprop x*) Aw Abox))) xs* Aws)))))))])
 
 
 (provide (backprop-out unsafe-car unsafe-cdr))
@@ -269,3 +281,49 @@
   (if (= n 0)
       '()
       (cons (car xs) (take (cdr xs) (sub1 n)))))
+
+
+(provide (backprop-out matrix* matrix-transpose list->matrix matrix->list
+                       matrix-num-rows matrix-num-cols))
+
+(require/backprop
+ "matrix.rkt"
+ [(matrix* a b)
+  (λ (Aw Abox)
+    (list '()
+          (matrix* Aw (matrix-transpose b))
+          (matrix* (matrix-transpose a) Aw)))]
+
+ [(matrix-transpose a)
+  (λ (Aw Abox) (list '() (matrix-transpose Aw)))]
+
+ [(list->matrix m n a)
+  (λ (Aw Abox) (list '() 0 0 (matrix->list Aw)))]
+
+ [(matrix->list M)
+  (λ (Aw Abox)
+    (let ([m (matrix-num-rows M)]
+          [n (matrix-num-cols M)])
+      (list '() (list->matrix m n Aw))))]
+
+ [(matrix-num-rows M)
+  (λ (Aw Abox) (list '() (gen-zero)))]
+
+ [(matrix-num-cols M)
+  (λ (Aw Abox) (list '() (gen-zero)))])
+
+(provide (backprop-out matrix-inverse))
+
+(require/primal+backprop
+ "matrix.rkt"
+ [matrix-inverse
+  (λ (M)
+    (let ([invM (matrix-inverse M)])
+      (proc-result
+       invM
+       (λ (Aw Abox)
+         (let ([invMT (matrix-transpose invM)])
+           (list '()
+                 (matrix-scale
+                  (matrix* (matrix* invMT Aw) invMT)
+                  -1)))))))])
