@@ -1,6 +1,10 @@
 TODO
 
-* Use generic collections ('linear' interface)
+* Interface
+  - local-register-primitive!/register-primitive! isn't quite right (doesn't
+    work for interactive)
+  - sometimes want to define a plain function and attach derivative information
+    (e.g. matrices)
 
 * Robustness
   - E.g. if (provide (backprop-out map1)) is missing from primitives.rkt,
@@ -10,7 +14,6 @@ TODO
     - make sure this case is handled
     - other cases like this?
   - More tests of second derivatives
-  - Don't include free-vars in closure variable sensitivities (works, but could blow up quickly)
 
 * Additional backpropagators
   - math/array
