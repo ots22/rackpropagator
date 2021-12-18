@@ -101,7 +101,7 @@
     (define/generic super-coerce-zero coerce-zero)
     (define (add u v) (array-map super-add u v))
     (define (scale u a) (array-map (λ (x) (super-scale x a)) u))
-    (define (coerce-zero u a) (array-map super-coerce-zero u))]
+    (define (coerce-zero u v) (array-map super-coerce-zero u v))]
 
    [proc-result?
     (define/generic super-add add)
