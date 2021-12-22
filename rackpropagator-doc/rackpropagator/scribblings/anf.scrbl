@@ -56,11 +56,20 @@
 
 ]
 
+@racket[literal] and @racket[formals] are the same as in ANF1.
+
 ANF2 has a more restricted grammar than ANF1:
 @itemlist[
-@item{The form in tail position can only be an identifier}
-@item{All function applications are made in a @racket[let-values] binding (no explicit tail calls)}
-@item{Function application and @racket[if] only use identifiers}
+
+@item{The body of a @racket[let-values] can only be an identifier or
+another @racket[let-values]}
+
+@item{All function applications are made in a @racket[let-values]
+binding (no explicit tail calls)}
+
+@item{Function application and @racket[if] only use identifiers
+(wrapped in thunks in the branches of an @racket[if])}
+
 ]
 
 
