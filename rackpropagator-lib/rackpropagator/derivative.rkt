@@ -1,12 +1,10 @@
 #lang racket/base
 
-(require "apply.rkt"
-         "builtins.rkt"
+(require "builtins.rkt"
          "prim-definition.rkt"
-         (for-syntax (except-in racket/base apply)
+         (for-syntax racket/base
                      syntax/parse
                      "anf.rkt"
-                     "apply.rkt"
                      "builtins.rkt"
                      "reverse-transform.rkt"))
 

@@ -3,13 +3,14 @@
 (require racket/list
          racket/function
          racket/unsafe/ops
-         "matrix.rkt"
-         "apply.rkt"
+         ;; "matrix.rkt"
          "builtins.rkt"
          "derivative.rkt"
          "prim-definition.rkt"
          syntax/parse/define
-         (for-syntax racket/base
+         (for-syntax "builtins.rkt"
+                     racket/base
+                     racket/list
                      racket/syntax))
 
 
@@ -71,6 +72,10 @@
   (λ (Aw Abox) (cons '() Aw))]
 
  [(identity x)
+  (λ (Aw Abox) (list '() Aw))]
+
+ ;; single value only
+ [(values x)
   (λ (Aw Abox) (list '() Aw))]
 
  [(make-list n x)
@@ -262,46 +267,77 @@
       (cons (car xs) (take (cdr xs) (sub1 n)))))
 
 
-(provide (backprop-out matrix* matrix-transpose list->matrix matrix->list
-                       matrix-num-rows matrix-num-cols))
 
-(require/backprop
- "matrix.rkt"
- [(matrix* a b)
-  (λ (Aw Abox)
-    (list '()
-          (matrix* Aw (matrix-transpose b))
-          (matrix* (matrix-transpose a) Aw)))]
+;; (provide matrix* matrix-transpose list->matrix matrix->list
+;;          matrix-num-rows matrix-num-cols)
 
- [(matrix-transpose a)
-  (λ (Aw Abox) (list '() (matrix-transpose Aw)))]
+;; (require/backprop
+;;  "matrix.rkt"
+;;  [(matrix* a b)
+;;   (λ (Aw Abox)
+;;     (list '()
+;;           (matrix* Aw (matrix-transpose b))
+;;           (matrix* (matrix-transpose a) Aw)))]
 
- [(list->matrix m n a)
-  (λ (Aw Abox) (list '() 0 0 (matrix->list Aw)))]
+;;  [(matrix-transpose a)
+;;   (λ (Aw Abox) (list '() (matrix-transpose Aw)))]
 
- [(matrix->list M)
-  (λ (Aw Abox)
-    (let ([m (matrix-num-rows M)]
-          [n (matrix-num-cols M)])
-      (list '() (list->matrix m n Aw))))]
+;;  [(list->matrix m n a)
+;;   (λ (Aw Abox) (list '() 0 0 (matrix->list Aw)))]
 
- [(matrix-num-rows M)
-  (λ (Aw Abox) (list '() (gen-zero)))]
+;;  [(matrix->list M)
+;;   (λ (Aw Abox)
+;;     (let ([m (matrix-num-rows M)]
+;;           [n (matrix-num-cols M)])
+;;       (list '() (list->matrix m n Aw))))]
 
- [(matrix-num-cols M)
-  (λ (Aw Abox) (list '() (gen-zero)))])
+;;  [(matrix-num-rows M)
+;;   (λ (Aw Abox) (list '() (gen-zero)))]
 
-(provide (backprop-out matrix-inverse))
+;;  [(matrix-num-cols M)
+;;   (λ (Aw Abox) (list '() (gen-zero)))])
 
-(require/primal+backprop
- "matrix.rkt"
- [matrix-inverse
-  (λ (M)
-    (let ([invM (matrix-inverse M)])
-      (proc-result
-       invM
-       (λ (Aw Abox)
-         (let ([invMT (matrix-transpose invM)])
-           (list '() (matrix-scale (matrix* (matrix* invMT Aw) invMT)
-                                   -1)))))))])
+;; (provide matrix-inverse)
 
+;; (require/primal+backprop
+;;  "matrix.rkt"
+;;  [matrix-inverse
+;;   (λ (M)
+;;     (let ([invM (matrix-inverse M)])
+;;       (proc-result
+;;        invM
+;;        (λ (Aw Abox)
+;;          (let ([invMT (matrix-transpose invM)])
+;;            (list '() (matrix-scale (matrix* (matrix* invMT Aw) invMT)
+;;                                    -1)))))))])
+
+
+
+
+;; Must handle 'apply' specially. This approach means we don't need to
+;; introduce an extra binding/wrapper as done previously.
+(provide apply)
+
+(begin-for-syntax
+  (define apply*-definition
+    #'(λ (f . args)
+        (let* ([p+b (apply apply f args)]
+               [p (primal p+b)]
+               [b (backprop p+b)])
+          (proc-result p
+                       (λ (Aw Abox)
+                         (let* ([^f+args (b Aw Abox)]
+                                [^f (car ^f+args)]
+                                [^args (cdr ^f+args)]
+                                [n-1 (sub1 (length args))]
+                                [head (take ^args n-1)]
+                                [tail (drop ^args n-1)])
+                           (list* '() ^f (append head (list tail)))))))))
+
+  (set-prim-definition! (local-expand #'apply 'expression '())
+                        apply*-definition)
+
+  (syntax-parse (local-expand #'(apply) 'expression '())
+    #:literals (#%plain-app)
+    [(#%plain-app apply-proc)
+     (set-prim-definition! #'apply-proc apply*-definition)]))
