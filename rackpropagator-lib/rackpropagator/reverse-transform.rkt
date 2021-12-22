@@ -9,11 +9,10 @@
          racket/function
          racket/syntax
          racket/set
-         syntax/parse
-         syntax/stx
          syntax/id-table
          syntax/id-set
          syntax/parse
+         syntax/stx
          "anf.rkt")
 
 (provide reverse-transform)
@@ -134,26 +133,6 @@
               (list b (gen-zero))
               (list (gen-zero) b))))]))
 
-(define (unknown-transform b bound-ids)
-  (define (known-binding? id)
-    (or (get-prim-definition id)
-        (set-member? (immutable-free-id-set bound-ids) id)))
-
-  (syntax-parse b
-    #:local-conventions ([#rx"^x" id]
-                         [lhs id])
-    #:literal-sets (kernel-literals)
-    [((lhs) x)
-     (filter-not known-binding? (list #'x))]
-
-    [((lhs) (#%plain-app x0 xs ...))
-     (filter-not known-binding? (syntax-e #'(x0 xs ...)))]
-
-    [((lhs) (if x-test (#%plain-app x-true) (#%plain-app x-false)))
-     (filter-not known-binding? (list #'x-test #'x-true #'x-false))]
-
-    [else '()]))
-
 (define (reverse-transform f [bound-ids '()])
   (syntax-parse f
     #:conventions (anf-convention)
@@ -166,28 +145,31 @@
      #:with (B ...) #'(body.bindings ...)
      #:with (x ...) #'(B.x ...)
      #:with result:id/backprop-ids #'body.result
-
      #:with (x-free ...) (free-vars #'lam)
 
+     #:with (x-unknown ...)
+     (set->list
+      (set-subtract (immutable-free-id-set (syntax-e #'(x-free ...)))
+                    (immutable-free-id-set bound-ids)))
+
+     ;; add unknown to bound ids, so their reverse transform is only
+     ;; included in the outermost lambda
      #:do [(define bound-ids* (append bound-ids
                                       (syntax->list #'(formals.vars ...))
-                                      (syntax->list #'(x ...))))]
+                                      (syntax->list #'(x ...))
+                                      (syntax->list #'(x-unknown ...))))]
 
      #:with ((primal-bindings prim ...) ...)
      (map (curryr ϕ bound-ids*) (syntax-e #'(B ...)))
 
-     #:with (prim-dedup ...) (remove-duplicates (syntax-e #'(prim ... ...))
-                                                free-identifier=?)
-     
-     #:with (prim-def ...) (map get-prim-definition (syntax-e #'(prim-dedup ...)))
-
      #:with (backprop-bindings ...)
      (map (curryr ρ #'box-sensitivities) (reverse (syntax-e #'(B ...))))
 
-     #:with (x-unknown ...)
-     (remove-duplicates 
-      (append-map (curryr unknown-transform bound-ids*) (syntax-e #'(B ...)))
-      free-identifier=?)
+     #:with (prim-dedup ...)
+     (remove-duplicates (syntax-e #'(prim ... ...)) free-identifier=?)
+
+     #:with (prim-def ...)
+     (map get-prim-definition (syntax-e #'(prim-dedup ...)))
 
      #'(λ formals.reversed
          (let ([x-unknown.reversed (unknown-transform x-unknown 'x-unknown)] ...
@@ -204,4 +186,3 @@
                     backprop-bindings ...)
                  (list* (list x-free.sensitivity ...)
                         formals.sensitivity-result ...)))))))]))
- 
