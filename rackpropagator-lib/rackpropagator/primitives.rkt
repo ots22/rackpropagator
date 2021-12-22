@@ -29,12 +29,12 @@
     (define/D+ (f-prim . f-spec.vars)
       (define f-spec body ...)
       f-spec.appl)
-    (local-register-primitive! f-spec.prim-id (lift/D+ f-prim))
-    (provide (backprop-out f-prim f-spec.prim-id))))
+    (register-primitive! f-spec.prim-id (lift/D+ f-prim))
+    (provide f-spec.prim-id)))
 
 
-(provide (backprop-out + - * sub1 cons car cdr list identity log make-list
-                       > < = length null? equal? make-hasheq unbox set-box!))
+(provide + - * sub1 cons car cdr list identity values log make-list
+         > < = length null? equal? make-hasheq unbox set-box!)
 
 (require/backprop
  racket
@@ -111,7 +111,7 @@
       (list '() (gen-zero) Ax)))])
 
 
-(provide (backprop-out vector vector->list list->vector))
+(provide vector vector->list list->vector)
 
 (require/backprop
  racket/base
@@ -125,7 +125,7 @@
   (λ (Aw Abox) (list '() (vector->list Aw)))])
 
 
-(provide (backprop-out box exp build-list))
+(provide box exp build-list)
 
 (require/primal+backprop
  racket/base
@@ -160,7 +160,7 @@
                        (map (λ (x* Aw) (car ((backprop x*) Aw Abox))) xs* Aws)))))))])
 
 
-(provide (backprop-out unsafe-car unsafe-cdr))
+(provide unsafe-car unsafe-cdr)
 
 (require/backprop
  racket/unsafe/ops
@@ -171,28 +171,8 @@
   (λ (Aw Abox) (list '() (cons (gen-zero) Aw)))])
 
 
-(provide (backprop-out apply))
-
-(require/primal+backprop
- "apply.rkt"
- [apply
-  (λ (f . args)
-    (let* ([p+b (apply apply f args)]
-           [p (primal p+b)]
-           [b (backprop p+b)])
-      (proc-result p
-                   (λ (Aw Abox)
-                     (let* ([^f+args (b Aw Abox)]
-                            [^f (car ^f+args)]
-                            [^args (cdr ^f+args)]
-                            [n-1 (sub1 (length args))]
-                            [head (take ^args n-1)]
-                            [tail (drop ^args n-1)])
-                       (list* '() ^f (append head (list tail))))))))])
-
-
-(provide (backprop-out add scale car0 cdr0 proc-result primal backprop gen-zero
-                       coerce-zero))
+(provide add scale car0 cdr0 proc-result primal backprop gen-zero
+         coerce-zero)
 
 (require/backprop
  "builtins.rkt"
@@ -245,7 +225,6 @@
       x
       (cons x (apply list* xs))))
 
-(provide (backprop-out map1))
 (define/D+ (map1 f xs)
   (if (null? xs)
       '()

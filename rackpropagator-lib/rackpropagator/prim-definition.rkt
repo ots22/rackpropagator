@@ -3,24 +3,19 @@
 (require racket/stxparam
          syntax/parse/define
          "builtins.rkt"
-         "apply.rkt"
-         (for-syntax (except-in racket/base apply)
-                     "apply.rkt"
+         (for-syntax racket/base
                      racket/dict
                      racket/provide-transform
                      racket/splicing
                      syntax/id-table
                      syntax/parse))
 
-(provide local-register-primitive!
-         register-primitive!
-         backprop-out
+(provide register-primitive!
          require/primal+backprop
          require/backprop
          (for-syntax prim-spec
                      get-prim-definition
                      set-prim-definition!))
-
 
 (begin-for-syntax
   (define-syntax-class prim-spec
@@ -36,7 +31,13 @@
 
 ;; ----------------------------------------
 
+;; Table mapping primitive bindings to the definition of their reverse
+;; transformation
+
 (define-for-syntax prim-table (make-free-id-table))
+
+
+;; ----------------------------------------
 
 (define-for-syntax (get-prim-definition id)
   (dict-ref prim-table id #f))
@@ -44,41 +45,22 @@
 (define-for-syntax (set-prim-definition! prim-id prim-augmented-def)
   (dict-set! prim-table prim-id prim-augmented-def))
 
-;; ----------------------------------------
-
-(define-syntax (local-register-primitive! stx)
-  (syntax-parse stx
-    [(_ prim-id prim-augmented-def)
-     (set-prim-definition! #'prim-id #'prim-augmented-def)
-     #'(void)]))
 
 (define-syntax (register-primitive! stx)
   (syntax-parse stx
-    [(_ prim-id)
-     #:with prim-augmented-def (get-prim-definition #'prim-id)
+    [(_ prim-id prim-augmented-def)
+     ;; expand to handle *some* impersonators, renaming transformers etc
+     #:with prim-id* (local-expand #'prim-id 'expression '())
      #'(begin-for-syntax
-         (set-prim-definition! #'prim-id #'prim-augmented-def))]))
+         (set-prim-definition! #'prim-id* #'prim-augmented-def))]))
 
-;; ----------------------------------------
-
-(define-syntax backprop-out
-  (make-provide-pre-transformer
-   (λ (stx modes)
-     (syntax-parse stx
-       [(_ p ...)
-        (begin
-          (map syntax-local-lift-module-end-declaration
-               (syntax-e #'((register-primitive! p) ...)))
-          (pre-expand-export #'(combine-out p ...) modes))]))))
-
-;; ----------------------------------------
 
 (define-syntax-parse-rule (require/primal+backprop
                            path
                            [prim-id prim-augmented-def] ...)
   (begin
     (require (only-in path prim-id ...))
-    (local-register-primitive! prim-id prim-augmented-def) ...))
+    (register-primitive! prim-id prim-augmented-def) ...))
 
 (define-syntax-parse-rule (require/backprop
                            path

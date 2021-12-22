@@ -68,7 +68,7 @@
      #:with (xs* ...) (generate-temporaries #'(xs ...))
      #'(begin
          (define (f xs ...) body ...)
-         (local-register-primitive!
+         (register-primitive!
           f
           (lift/D+ (λ (xs* ...)
                      (define (f xs ...) body ...)
@@ -78,7 +78,7 @@
      #:with (xs* ... xn*) (generate-temporaries #'(xs ... xn))
      #'(begin
          (define (f xs ... . xn) body ...)
-         (local-register-primitive!
+         (register-primitive!
           f
           (lift/D+ (λ (xs* ... . xn*)
                      (define (f xs ... . xn) body ...)
@@ -87,4 +87,4 @@
     [(_ f expr)
      #'(begin
          (define f expr)
-         (local-register-primitive! f (lift/D+ (λ xs (apply expr xs)))))]))
+         (register-primitive! f (lift/D+ (λ xs (apply expr xs)))))]))
