@@ -190,7 +190,7 @@
       free-identifier=?)
 
      #'(λ formals.reversed
-         (let ([x-unknown.reversed (unknown-backprop x-unknown 'x-unknown)] ...
+         (let ([x-unknown.reversed (unknown-transform x-unknown 'x-unknown)] ...
                [prim-dedup.reversed prim-def] ...)
           (destructuring-sum-let* (primal-bindings ...)
             (proc-result

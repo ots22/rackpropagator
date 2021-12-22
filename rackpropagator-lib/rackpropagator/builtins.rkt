@@ -11,7 +11,11 @@
                      [proc-result-backprop0 backprop])
          proc-result?
          strip-backprop
-         unknown-backprop
+         unknown-transform
+         current-unknown-transform
+         error-unknown-transform
+         error-unknown-proc-transform
+         error-non-zero-sensitivity-transform
          gen-zero?
          zero
          coerce-zero
@@ -131,30 +135,31 @@
     [(proc-result? p) (proc-result-primal0 p)]
     [else p]))
 
-;; (define (unknown-backprop op op-name)
-;;   (let ([op* (strip-backprop op)])
-;;          (if (procedure? op*)
-;;              (λ xs
-;;                (make-proc-result
-;;                 (apply op* xs)
-;;                 (λ (Aw Abox)
-;;                   (if (gen-zero? Aw)
-;;                       Aw
-;;                       (raise-arguments-error 'prim-definition
-;;                                              "Backpropagator unknown"
-;;                                              "op" op-name)))))
-;;              op)))
 
-(define (unknown-backprop op op-name)
+(define (error-unknown-transform op op-name)
+  (raise-arguments-error 'lift/D+
+                         "Backpropagator unknown"
+                         "op" op-name))
+
+(define (error-unknown-proc-transform op op-name)
+  (if (procedure? op)
+      (error-unknown-transform op op-name)
+      op))
+
+(define (error-non-zero-sensitivity-transform op op-name)
   (if (procedure? op)
       (λ xs
         (let ([result (apply op xs)])
           (make-proc-result
-           (if (proc-result? result) (proc-result-primal result) result)
+           result
            (λ (Aw Abox)
              (if (gen-zero? Aw)
                  Aw
-                 (raise-arguments-error 'prim-definition
-                                        "Backpropagator unknown"
-                                        "op" op-name))))))
-        op))
+                 (error-unknown-transform op op-name))))))
+      op))
+
+(define current-unknown-transform
+  (make-parameter error-non-zero-sensitivity-transform))
+
+(define (unknown-transform op op-name)
+  ((current-unknown-transform) op op-name))
