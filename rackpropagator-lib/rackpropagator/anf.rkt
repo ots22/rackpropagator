@@ -200,6 +200,14 @@
     [(#%expression e)
      (anf1-normalize #'e k)]
 
+    [(begin us ...+)
+     (anf1-normalize #'(let-values () us ...))]
+
+    [(begin0 u0 us ...)
+     (anf1-normalize #'(let-values ([(x0) u0])
+                         us ...
+                         x0))]
+
     [(#%plain-lambda formals u)
      #:with M (anf1-normalize #'u)
      (k #'(#%plain-lambda formals M))]
