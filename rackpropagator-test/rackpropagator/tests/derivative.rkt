@@ -109,6 +109,15 @@
                     #:primal 8.0
                     #:derivative '(12.0 0.0)))
 
+(test-case "pow (for/fold)"
+  (check-derivative (λ (x n)
+                      (for/fold ([acc 1.0])
+                                ([i (in-range n)])
+                        (* acc x)))
+                    #:at '(2.0 3)
+                    #:primal 8.0
+                    #:derivative '(12.0 0.0)))
+
 (test-case "scale gen-zero"
   (check-derivative (λ (x)
                       ;; f accumulates a result into r, but does not
@@ -278,4 +287,57 @@
   (check-derivative (λ (x) (if * x (- x)))
                     #:at '(5.0)
                     #:primal 5.0
+                    #:derivative '(1.0)))
+
+(test-case "Mutation"
+  (check-derivative (λ (x) (let ([y x]) (set! y (* y y)) y))
+                    #:at '(3.0)
+                    #:primal 9.0
+                    #:derivative '(6.0))
+
+  (check-derivative (λ (x) (set! x (* x x)) x)
+                    #:at '(3.0)
+                    #:primal 9.0
+                    #:derivative '(6.0))
+
+
+  ;; the boxed versions of y and z will compare equal? in this
+  ;; example, so check that these are distinguished as hash keys with
+  ;; eq? instead (incorrect result otherwise).
+  (check-derivative (λ (x)
+                      (let ([y x]
+                            [z x])
+                        (set! y (+ y y))
+                        (set! z (+ z z))
+                        (+ y z)))
+                    #:at '(2.0)
+                    #:primal 8.0
+                    #:derivative '(4.0))
+
+  (check-derivative (λ (x)
+                      (let ([f '()])
+                        (set! f (λ (y)
+                                  (set! x (+ x 1))
+                                  (set! y (* x y))
+                                  (set! x 100.0)
+                                  y))
+                        (f x)))
+                    #:at '(3.0)
+                    #:primal 12.0
+                    #:derivative '(7.0))
+
+  (check-derivative (λ (x)
+                      (begin
+                        (set! x (* 2.0 x))
+                        x))
+                    #:at '(3.0)
+                    #:primal 6.0
+                    #:derivative '(2.0))
+
+  (check-derivative (λ (x)
+                      (begin0
+                          x
+                        (set! x (* 2.0 x))))
+                    #:at '(3.0)
+                    #:primal 3.0
                     #:derivative '(1.0)))
