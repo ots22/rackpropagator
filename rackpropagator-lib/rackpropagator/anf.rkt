@@ -422,13 +422,21 @@
                 (set!-target-ids #'M2))]
 
     [(let-values (((x) (set! x1 V))) M)
-     (set-add (set!-target-ids #'M) #'x1)]
+     (set-add
+      (set-union (set!-target-ids #'M)
+                 (set!-target-ids #'V))
+      #'x1)]
 
     ;; remaining let-values cases
     [(let-values (B) M)
      (set!-target-ids #'M)]
 
-    [x (immutable-free-id-set)]))
+    [c (immutable-free-id-set)]
+
+    [x (immutable-free-id-set)]
+
+    [(#%plain-lambda formals M)
+     (set!-target-ids #'M)]))
 
 ;; set!->set-box! : anf2? -> anf2?
 ;;
