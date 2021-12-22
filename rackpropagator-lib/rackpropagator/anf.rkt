@@ -50,7 +50,8 @@
 (define-syntax-class anf-simple-literal
   #:literal-sets (kernel-literals)
   (pattern (quote e))
-  (pattern (quote-syntax e {~optional #:local})))
+  (pattern (quote-syntax e {~optional #:local}))
+  (pattern (#%variable-reference {~optional id})))
 
 (define-conventions anf1+2-convention
   [#rx"^x" id]
