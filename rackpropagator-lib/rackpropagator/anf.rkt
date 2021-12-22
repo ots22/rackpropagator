@@ -194,7 +194,7 @@
 ;;
 ;; anf-normalize: syntax? (syntax? -> syntax?) -> anf?
 (define (anf1-normalize stx [k identity])
-  (syntax-parse stx
+  (syntax-parse (syntax-disarm stx #f)
     #:conventions (anf1+2-convention)
     #:literal-sets (kernel-literals)
     [(#%expression e)
