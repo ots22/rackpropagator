@@ -41,11 +41,15 @@
 
 (define-syntax-class lambda-formals
   (pattern (x:id ...)
-           #:attr vars #'(x ...))
+           #:with (vars ...) #'(x ...)
+           #:with temporaries (generate-temporaries #'(x ...)))
   (pattern xs:id
-           #:attr vars #'(xs))
+           #:with (vars ...) #'(xs)
+           #:with temporaries (generate-temporary #'xs))
   (pattern (x:id ...+ . xs:id)
-           #:attr vars #'(x ... xs)))
+           #:with (vars ...) #'(x ... xs)
+           #:with temporaries #`(#,(generate-temporaries #'(x ...))
+                                 . #,(generate-temporary #'xs))))
 
 (define-syntax-class anf-simple-literal
   #:literal-sets (kernel-literals)
@@ -158,7 +162,7 @@
 
     [(#%plain-lambda formals M*)
      (set-subtract (anf-free-vars #'M*)
-                   (Set (syntax-e #'formals.vars)))]
+                   (Set (syntax-e #'(formals.vars ...))))]
 
     [(#%plain-app x0 xs ...)
      (Set (syntax-e #'(x0 xs ...)))]
@@ -460,10 +464,31 @@
        #:with $x1 (target-box-value #'x (target-unbox #'x1))
        #'(let-values (((x) $x1)) $M)]
 
+      ;; straightforward case: none of formals is a target of set!
       [(let-values (((x) (#%plain-lambda formals M1))) M2)
+       #:when (andmap (λ (arg) (not (set-member? targets arg)))
+                      (syntax-e #'(formals.vars ...)))
        #:with $M1 (rec #'M1)
        #:with $M2 (rec #'M2)
        #:with lam (target-box-value #'x #'(#%plain-lambda formals $M1))
+       #'(let-values (((x) lam)) $M2)]
+
+      ;; when one or more lambda formals is a set! target, introduce
+      ;; extra let bindings, boxed as necessary
+      [(let-values (((x) (#%plain-lambda formals M1))) M2)
+       #:when (ormap (λ (arg) (set-member? targets arg))
+                     (syntax-e #'(formals.vars ...)))
+       #:with $M1 (rec #'M1)
+       #:with $M2 (rec #'M2)
+       #:with formals*:lambda-formals #'formals.temporaries
+       #:with (formals*-boxed-vars ...) (map target-box-value
+                                             (syntax-e #'(formals.vars ...))
+                                             (syntax-e #'(formals*.vars ...)))
+       #:with lam #'(#%plain-lambda formals*
+                      (let-values ([(formals.vars) formals*-boxed-vars] ...)
+                        $M1))
+
+       #:with lam* (target-box-value #'x #'lam)
        #'(let-values (((x) lam)) $M2)]
 
       [(let-values (((x) (#%plain-app x0 xs ...))) M)
@@ -495,12 +520,32 @@
        #:with st (target-box-value #'x #'(#%plain-app set-box! x1 $x2))
        #'(let-values (((x) st)) $M)]
 
+      ;; Two lambda cases as above, but when used in set!
       [(let-values (((x) (set! x1 (#%plain-lambda formals M1)))) M2)
+       #:when (andmap (λ (arg) (not (set-member? targets arg)))
+                      (syntax-e #'(formals.vars ...)))
        #:with $M1 (rec #'M1)
        #:with $M2 (rec #'M2)
        #:with st (target-box-value
                   #'x
                   #'(#%plain-app set-box! x1 (#%plain-lambda formals $M1)))
+       #'(let-values (((x) st)) $M2)]
+
+      [(let-values (((x) (set! x1 (#%plain-lambda formals M1)))) M2)
+       #:when (ormap (λ (arg) (set-member? targets arg))
+                     (syntax-e #'(formals.vars ...)))
+       #:with $M1 (rec #'M1)
+       #:with $M2 (rec #'M2)
+       #:with formals*:lambda-formals #'formals.temporaries
+       #:with (formals*-boxed-vars ...) (map target-box-value
+                                             (syntax-e #'(formals.vars ...))
+                                             (syntax-e #'(formals*.vars ...)))
+       #:with lam #'(#%plain-lambda formals*
+                      (let-values ([(formals.vars) formals*-boxed-vars] ...)
+                        $M1))
+       #:with st (target-box-value
+                  #'x
+                  #'(#%plain-app set-box! x1 lam))
        #'(let-values (((x) st)) $M2)]))
 
   (anf2-normalize (rec stx)))
