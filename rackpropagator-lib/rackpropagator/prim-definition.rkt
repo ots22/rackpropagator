@@ -51,8 +51,9 @@
     [(_ prim-id prim-augmented-def)
      ;; expand to handle *some* impersonators, renaming transformers etc
      #:with prim-id* (local-expand #'prim-id 'expression '())
+     #:with prim-augmented-def* (local-expand #'prim-augmented-def 'expression '())
      #'(begin-for-syntax
-         (set-prim-definition! #'prim-id* #'prim-augmented-def))]))
+         (set-prim-definition! #'prim-id* #'prim-augmented-def*))]))
 
 
 (define-syntax-parse-rule (require/primal+backprop
