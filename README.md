@@ -1,4 +1,4 @@
-The repository formerly hosted at this location is now at https://github.com/ots22/ad-explorations
+The repository formerly hosted at this location is now at https://github.com/ots22/racket-ad-demos
 
 # Rackpropagator
 
