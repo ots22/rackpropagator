@@ -1,10 +1,12 @@
 #lang racket/base
 
 (require racket/match
+         racket/contract
          syntax/macro-testing
          syntax/parse/define
          rackunit
          rackpropagator
+         rackpropagator/prim-definition
          (for-syntax racket/base
                      syntax/parse))
 
@@ -19,7 +21,7 @@
 
   #:with (adjoint* ...) #'({~? adjoint 1.0} ...)
   (let ([Df (D+ lambda-expr)])
-    (match-let ([(proc-result* p b) (apply Df args)])
+    (match-let ([(proc-result p b) (apply Df args)])
       (check-equal? p primal-expected)
       (check-equal? (b adjoint*) deriv-expected)) ...))
 
@@ -77,7 +79,7 @@
                         (pow x n)))
                     #:at '(2.0 3)
                     #:primal 8.0
-                    #:derivative '(12.0 0.0)))
+                    #:derivative '(12.0 0)))
 
 (test-case "pow (box)"
   (check-derivative (λ (x n)
@@ -89,7 +91,7 @@
                         ((unbox f) x n)))
                     #:at '(2.0 3)
                     #:primal 8.0
-                    #:derivative '(12.0 0.0)))
+                    #:derivative '(12.0 0)))
 
 (test-case "pow"
   (check-derivative (λ (x n)
@@ -98,7 +100,7 @@
                       (pow x n))
                     #:at '(2.0 3)
                     #:primal 8.0
-                    #:derivative '(12.0 0.0)))
+                    #:derivative '(12.0 0)))
 
 (test-case "pow 2"
   (check-derivative (λ (x n)
@@ -107,7 +109,7 @@
                       (pow x n 1))
                     #:at '(2.0 3)
                     #:primal 8.0
-                    #:derivative '(12.0 0.0)))
+                    #:derivative '(12.0 0)))
 
 (test-case "pow (for/fold)"
   (check-derivative (λ (x n)
@@ -116,7 +118,7 @@
                         (* acc x)))
                     #:at '(2.0 3)
                     #:primal 8.0
-                    #:derivative '(12.0 0.0)))
+                    #:derivative '(12.0 0)))
 
 (test-case "scale gen-zero"
   (check-derivative (λ (x)
@@ -142,7 +144,7 @@
                         (f x n)))
                     #:at '(5.0 5)
                     #:primal 775.0
-                    #:derivative '(585.0 0.0)))
+                    #:derivative '(585.0 0)))
 
 (test-case "Different final use"
   (check-derivative (λ (x) (let ([b 1]) x))
@@ -229,7 +231,7 @@
                         ((unbox f) x n)))
                     #:at '(2.0 3)
                     #:primal 8.0
-                    #:derivative '(12.0 0.0))
+                    #:derivative '(12.0 0))
 
   ;; The uses of set! in the following should expand to something
   ;; similar to the example above
@@ -243,7 +245,7 @@
                         (f x n)))
                     #:at '(2.0 3)
                     #:primal 8.0
-                    #:derivative '(12.0 0.0))
+                    #:derivative '(12.0 0))
   ;
   )
 
@@ -265,6 +267,10 @@
    (λ () ((backprop ((D+ (λ (x) (* x x))) 1.0)) 1.0))))
 
 (test-case "Second derivative"
+  (check-equal?
+   (((D (grad *)) 3.0 4.0) '(1.0 0.0))
+   '(0.0 1.0))
+
   (check-equal?
    ((backprop
      ((D+ (λ (y) ((backprop ((D+ (λ (x) (* x x)))
@@ -299,7 +305,6 @@
                     #:at '(3.0)
                     #:primal 9.0
                     #:derivative '(6.0))
-
 
   ;; the boxed versions of y and z will compare equal? in this
   ;; example, so check that these are distinguished as hash keys with
@@ -340,4 +345,110 @@
                         (set! x (* 2.0 x))))
                     #:at '(3.0)
                     #:primal 3.0
+                    #:derivative '(1.0)))
+
+(test-case "lift/D+"
+  (check-derivative foldl
+                    #:at (list (lift/D+ *) 1 '(2 3 4))
+                    #:primal 24
+                    #:derivative '(() 24.0 (12.0 8.0 6.0)))
+
+  (check-equal?
+   ((grad apply) (let ([y 5.0]) (lift/D+ (λ (x) (* x y)))) (list 2.0))
+   '((2.0) (5.0))))
+
+(test-case "Vector"
+  (check-derivative (λ xs
+                      (vector->list
+                       (vector-copy
+                        (vector->immutable-vector
+                         (list->vector xs)))))
+                    #:at '(10 20 30 40)
+                    #:primal '(10 20 30 40)
+                    #:adjoint '(0.1 0.2 0.3 0.4)
+                    #:derivative '(0.1 0.2 0.3 0.4))
+
+  (check-derivative (λ xs
+                      (vector->list
+                       (vector-copy
+                         (list->vector xs))))
+                    #:at '(10 20 30 40)
+                    #:primal '(10 20 30 40)
+                    #:adjoint '(0.1 0.2 0.3 0.4)
+                    #:derivative '(0.1 0.2 0.3 0.4))
+
+  (check-derivative (λ xs
+                      (define v (list->vector xs))
+                      (define v* (vector-copy v))
+                      (vector-set! v* 0 (* (vector-ref v* 0) (vector-ref v* 1)))
+                      (+ (* (vector-ref v 0) (vector-ref v* 0))
+                         (* (vector-ref v 1) (vector-ref v* 1))))
+                    #:at '(3 5)
+                    #:primal 70
+                    #:adjoint 1
+                    #:derivative '(30 19))
+
+  (check-derivative (λ xs
+                      (define v (vector->immutable-vector (list->vector xs)))
+                      (define v* (vector-copy v))
+                      (vector-set! v* 0 (* (vector-ref v* 0) (vector-ref v* 1)))
+                      (+ (* (vector-ref v 0) (vector-ref v* 0))
+                         (* (vector-ref v 1) (vector-ref v* 1))))
+                    #:at '(3 5)
+                    #:primal 70
+                    #:adjoint 1
+                    #:derivative '(30 19))
+
+  (check-derivative (λ xs
+                      (define v (list->vector xs))
+                      (define v* (vector-copy v))
+                      (define v** (vector->immutable-vector v))
+                      (vector-set! v* 0 (* (vector-ref v* 0) (vector-ref v* 1)))
+                      (+ (* (vector-ref v 0) (vector-ref v* 0))
+                         (* (vector-ref v 1) (vector-ref v* 1))))
+                    #:at '(3 5)
+                    #:primal 70
+                    #:adjoint 1
+                    #:derivative '(30 19)))
+
+(test-case "Vector 2"
+  (let ([a 10])
+    (check-equal?
+     (((D (λ (n proc)
+            (vector->immutable-vector
+             (build-vector n proc))))
+       3 (lift/D+ (λ (x) (* x a))))
+      #(0 0 1))
+     '(0 (2)))))
+
+
+(define/contract (square-real x)
+  (-> real? real?)
+  (* x x))
+
+(register-primitive! square-real
+                     (λ (x)
+                       (proc-result (square-real x)
+                                    (λ (Aw Abox)
+                                      (list '() (scale Aw (* 2 x)))))))
+
+(test-case "Contract"
+  (check-derivative square-real
+                    #:at '(3.0)
+                    #:primal 9.0
+                    #:derivative '(6.0))
+
+  (check-exn exn:fail:contract?
+             (λ () ((grad square-real) 0+i))))
+
+(test-case "Hash table"
+  (check-derivative (λ (x)
+                      (define h (make-empty-hasheq))
+                      (hash-set! h 'b 10)
+                      (hash-ref! h 'c (* x 2))
+                      (hash-set! h 'a x)
+                      (hash-ref h 'a)
+                      (hash-ref! h 'a 'd))
+                    #:at '(5.0)
+                    #:primal 5.0
                     #:derivative '(1.0)))
