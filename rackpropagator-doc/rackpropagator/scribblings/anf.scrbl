@@ -6,9 +6,18 @@
 
 @defmodule[rackpropagator/anf]
 
+This module provides some utilities for transforming code into
+Administrative Normal Form, as introduced by @citet[flanagan1993].
+See also this excellent
+@hyperlink["https://matt.might.net/articles/a-normalization/"]{guide}.
 
-@~cite[flanagan1993].
+Routines are provided to transform into two related normal forms. The
+first is close to ANF as described in the reference above, the second
+is a variant consumed by the reverse transformation (to perform
+reverse-mode AD).
 
+The input syntax must match the grammar given in
+@secref{Supported_Language}.
 
 @section{A-Normal Form (first kind)}
 
@@ -139,16 +148,3 @@ enriched lexical context from expansion.
 Given an expression in ANF2, extract and return the outermost let-bound
 expression.
 }
-
-@section{Conventions and syntax classes}
-
-anf-convention
-
-anf-val
-
-anf-binding-expr
-
-anf-expr
-
-anf-simple-literal
-

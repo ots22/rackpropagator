@@ -68,17 +68,16 @@ binding single values.  See also @secref{Limitations}.
 
 @defmodule[rackpropagator/primitives]
 
-This module is required by the @racket[rackpropagator] module, and
-all of its exported bindings are re-provided.
+This module is required by the @racket[rackpropagator] module, and all
+of its exported bindings are re-provided.
 
 The bindings below are registered as primitives when this module is
 instantiated.  Registering a backpropagator does not affect the
 binding otherwise, so e.g. @racket[+] below will still bind the
 regular Racket addition function.
 
-@tabular[#:sep @hspace[2]
-         (chunk 4 ""
-                  (map (lambda (export) (to-element (datum->syntax #'ctxt export)))
+@tabular[(chunk 3 ""
+                (map (lambda (export) (to-element (datum->syntax #'ctxt export)))
                        (sort (cons 'apply (map car (cdar exported-primitives)))
                              symbol<?)))
          #:style (style #f
@@ -86,3 +85,27 @@ regular Racket addition function.
                          (attributes '((style . "table-layout: fixed ; width: 100%")))))
          ]
       
+
+Of these, the following are are not documented elsewhere (they are
+provided by the @racket[rackpropagator] module):
+
+@defproc[(make-empty-hasheq) (and/c hash? hash-eq? hash-empty?)]{
+
+Return a new mutable hash table exactly like @racket[make-hasheq],
+except no initialization argument can be passed (and so the resulting
+hash table is always empty).
+
+}
+
+@defproc[(vector-fold [f procedure?] [z any/c] [v vector?]) any/c]{
+
+Like @racket[foldl], but for a single vector argument @racket[v]
+(@racket[f] must accept two arguments).
+
+@examples[#:eval the-eval
+
+(vector-fold + 0 #(1 2 3 4 5))
+
+]
+
+}

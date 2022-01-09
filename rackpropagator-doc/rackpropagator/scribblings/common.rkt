@@ -8,9 +8,10 @@
          racket/string
          racket/list
          scribble/racket
-         (for-label (except-in racket apply)
+         (for-label racket
                     (only-in math/array array)
                     rackpropagator
+                    rackpropagator/builtins
                     rackpropagator/matrix
                     rackpropagator/primitives
                     rackpropagator/prim-definition
@@ -24,6 +25,7 @@
                        scriblib/autobib
                        racket/format
                        racket/string
+                       racket/list
                        scribble/racket)
          the-eval
          ~cite
@@ -33,6 +35,7 @@
          (for-label (all-from-out racket
                                   math/array
                                   rackpropagator
+                                  rackpropagator/builtins
                                   rackpropagator/matrix
                                   rackpropagator/primitives
                                   rackpropagator/prim-definition
@@ -42,7 +45,8 @@
 (define the-eval (make-base-eval))
 (the-eval '(begin (require racket/list)
                   (require rackpropagator)
-                  (require rackpropagator/prim-definition)))
+                  (require rackpropagator/prim-definition)
+                  (require racket/math)))
           
 
 (define-cite ~cite citet generate-bibliography)

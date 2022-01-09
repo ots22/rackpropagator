@@ -4,41 +4,14 @@
 
 @title{Registering primitives}
 
-@defmodule[rackpropagator/prim-definition]
+@;; @defmodule[rackpropagator/prim-definition]
 
-When differentiating an expression, each procedure that is encountered
-is replaced with one that computes both the @deftech{primal}---the
-undifferentiated function value, and a @deftech{backpropagator}---a
-function taking an output sensitivity and returning the argument
-sensitivities, called when computing derivative values.  The process
-of replacing the function with its primal and backpropagator is known
-as @deftech{reverse transformation}.
-
-In the example below, the reverse transformation of @racket[*] is
-obtained with @racket[lift/D+].  The primal and backpropagator are
-returned in a @racket[proc-result] struct.
-
-@examples[#:eval the-eval
-          #:label #f
-(define result ((lift/D+ *) 4.0 2.5))
-;result
-(primal result)
-(backprop result)
-]
-
-
-Procedures whose definitions occur within the expression being
-differentiated can be transformed automatically by the library.  Any
-procedure that is used but not defined within the expression must also
-be replaced with its reverse transform.  Such procedures are known as
-@deftech{primitives}, and include, for example, arithmetic operations.
-They must have backpropagators that are known in advance.
-
-This module allows new primitives to be registered, by specifying
-their primal and backpropagator.
+This module allows new @tech{primitives} to be registered, by
+specifying for each a modified function definition, augmenting the
+@tech{primal} computation with a @tech{backpropagator}.
 
 A transformation is associated with a particular binding (and not, for
-instance, a procedure value or a name).
+instance, a procedure value or a symbolic name).
 
 An existing binding can be registered as a primitive with
 @racket[register-primitive!], and a binding can be imported into a
@@ -49,20 +22,6 @@ Once a primitive is registered, the augmented definition is available
 from any other module in the namespace where that binding is available
 (that is, registering a primitive is an effect visible across module
 boundaries).
-
-@section{Backpropagators}
-
-In general terms, a backpropagator is a representation of the
-derivative of a function as ....
-
-In this library, backpropagators take two arguments: the result
-sensitivity, and the box sensitivities.  Ignore the latter for
-now---this is only important for mutable data---we will return to it
-below.  The result of a backpropagator is a list of argument
-sensitivies and
-
-A contract for a function with the right type to be a backpropagator
-might be given as follows ...
 
 
 @defform[(register-primitive! prim-id prim-augmented-def)]{
@@ -78,9 +37,9 @@ module in the same namespace that uses the binding.
 definition of @racket[prim-id] in differentiated code.  It should
 evaluate to a function that takes the same number of arguments as
 @racket[prim-id] and returns a @racket[proc-result] struct, whose
-`primal' field (@racket[primal]) contains the result of evaluting
-@racket[prim-id] at the arguments given, and whose `backprop' field
-(@racket[backprop]) contains a backpropagator function.
+@racket[primal] field contains the result of evaluting
+@racket[prim-id] at the arguments given, and whose @racket[backprop]
+field contains a backpropagator function.
 
 The function can share work between the primal and backpropagator.
 
