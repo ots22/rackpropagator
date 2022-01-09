@@ -1,24 +1,61 @@
 #lang racket
 
-(require math/array
-         (prefix-in m: math/matrix))
+(require "matrix-wrappers.rkt"
+         "builtins.rkt"
+         "derivative.rkt"
+         "prim-definition.rkt"
+         (for-syntax "builtins.rkt"
+                     racket/base
+                     racket/list
+                     racket/syntax))
 
-(provide matrix* matrix-transpose matrix-scale matrix-inverse list->matrix
-         matrix->list matrix-num-rows matrix-num-cols)
+(provide (all-from-out "matrix-wrappers.rkt"))
 
-(define (matrix* A B) (m:matrix* A B))
+(require/backprop
+ "matrix-wrappers.rkt"
+ [(matrix* a b)
+  (λ (Aw Abox)
+    (list '()
+          (matrix* Aw (matrix-transpose b))
+          (matrix* (matrix-transpose a) Aw)))]
 
-(define (matrix-transpose A) (m:matrix-transpose A))
+ [(matrix-transpose a)
+  (λ (Aw Abox) (list '() (matrix-transpose Aw)))]
 
-(define (matrix-scale M a) (m:matrix-scale M a))
+ [(matrix-scale M a)
+  (λ (Aw Abox)
+    (list '() (scale Aw a) (dot Aw M)))]
 
-(define (matrix-inverse A) (m:matrix-inverse A))
+ [(list->matrix m n a)
+  (λ (Aw Abox) (list '() 0 0 (matrix->list Aw)))]
 
-(define (list->matrix m n xs) (m:list->matrix m n xs))
+ [(matrix->list M)
+  (λ (Aw Abox)
+    (let ([m (matrix-num-rows M)]
+          [n (matrix-num-cols M)])
+      (list '() (list->matrix m n Aw))))]
 
-(define (matrix->list M) (m:matrix->list M))
+ [(matrix-num-rows M)
+  (λ (Aw Abox) (list '() (gen-zero)))]
 
-(define (matrix-num-rows M) (m:matrix-num-rows M))
+ [(matrix-num-cols M)
+  (λ (Aw Abox) (list '() (gen-zero)))])
 
-(define (matrix-num-cols M) (m:matrix-num-cols M))
+(require/primal+backprop
+ "matrix-wrappers.rkt"
+ [matrix-inverse
+  (λ (M)
+    (let ([invM (matrix-inverse M)])
+      (proc-result
+       invM
+       (λ (Aw Abox)
+         (let ([invMT (matrix-transpose invM)])
+           (list '() (matrix-scale (matrix* (matrix* invMT Aw) invMT)
+                                   -1)))))))])
 
+(require/backprop
+ "matrix-wrappers.rkt"
+ [(array* A B)
+  (λ (Aw Abox)
+    (let ([Aw* (coerce-zero Aw A)])
+      (list '() (array* Aw* B) (array* Aw* A))))])
