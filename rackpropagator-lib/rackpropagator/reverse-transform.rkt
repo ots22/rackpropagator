@@ -49,17 +49,20 @@
            #:attr (vars 1) (syntax->list #'(x ...))
            #:attr (sensitivity-vars 1) (syntax->list #'(x.sensitivity ...))
            #:attr (sensitivity-result 1) (syntax->list #'(x.sensitivity ... null))
-           #:attr reversed #'(x.reversed ...))
+           #:attr reversed #'(x.reversed ...)
+           #:attr (reversed-result 1) (syntax->list #'(x.reversed ... null)))
   (pattern xs:id/backprop-ids
            #:attr (vars 1) (syntax->list #'(xs))
            #:attr (sensitivity-vars 1) (syntax->list #'(xs.sensitivity))
            #:attr (sensitivity-result 1) (syntax->list #'(xs.sensitivity))
-           #:attr reversed #'xs.reversed)
+           #:attr reversed #'xs.reversed
+           #:attr (reversed-result 1) (syntax->list #'(xs.reversed)))
   (pattern (x:id/backprop-ids ...+ . xs:id/backprop-ids)
            #:attr (vars 1) (syntax->list #'(x ... xs))
            #:attr (sensitivity-vars 1) (syntax->list #'(x.sensitivity ... xs.sensitivity))
            #:attr (sensitivity-result 1) (syntax->list #'(x.sensitivity ... xs.sensitivity))
-           #:attr reversed #'(x.reversed ... . xs.reversed)))
+           #:attr reversed #'(x.reversed ... . xs.reversed)
+           #:attr (reversed-result 1) (syntax->list #'(x.reversed ... xs.reversed))))
 
 (define-syntax-class nested-let-values
   #:literal-sets (kernel-literals)
@@ -137,9 +140,14 @@
   (syntax-parse f
     #:conventions (anf-convention)
     #:local-conventions ([#rx"^x" id/backprop-ids]
-                         [prim-dedup id/backprop-ids]
                          [formals lambda-formals/backprop-ids])
     #:literal-sets (kernel-literals)
+
+    [prim:id
+     #:attr prim* (get-prim-definition #'prim)
+     (if (attribute prim*)
+         #'prim*
+         #'(unknown-transform prim 'prim))]
 
     [{~and lam (#%plain-lambda formals body:nested-let-values)}
      #:with (B ...) #'(body.bindings ...)
@@ -165,7 +173,7 @@
      #:with (backprop-bindings ...)
      (map (curryr ρ #'box-sensitivities) (reverse (syntax-e #'(B ...))))
 
-     #:with (prim-dedup ...)
+     #:with (prim-dedup:id/backprop-ids ...)
      (remove-duplicates (syntax-e #'(prim ... ...)) free-identifier=?)
 
      #:with (prim-def ...)
@@ -184,5 +192,8 @@
                     [formals.sensitivity-vars (gen-zero)] ...
                     [x.sensitivity (gen-zero)] ...
                     backprop-bindings ...)
-                 (list* (list x-free.sensitivity ...)
-                        formals.sensitivity-result ...)))))))]))
+                   (coerce-zero
+                    (list* (list x-free.sensitivity ...)
+                           formals.sensitivity-result ...)
+                    (list* (list x-free.reversed ...)
+                           formals.reversed-result ...))))))))]))
