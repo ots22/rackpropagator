@@ -2,11 +2,12 @@
 
 (define collection 'multi)
 
-(define deps '("base"
-               "rackpropagator-lib"
-               "rackunit-lib"))
+(define deps '("base"))
 
-(define build-deps '())
+(define build-deps '("rackpropagator-lib"
+                     "rackunit-lib"))
+
+(define update-implies '("rackpropagator-lib"))
 
 (define pkg-desc "Rackpropagator tests")
 
