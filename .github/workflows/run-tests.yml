@@ -1,0 +1,21 @@
+on: [push, pull_request]
+name: Run tests
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@master
+
+    - name: Install Racket
+      uses: Bogdanp/setup-racket@v1.6
+      with:
+        variant: CS
+        version: stable
+
+    - name: Install package
+      run: raco pkg install --batch --auto rackpropagator-lib/ rackpropagator-doc/ rackpropagator-test/ rackpropagator/
+
+    - name: Run tests
+      run: raco test rackpropagator-test/
