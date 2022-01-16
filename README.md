@@ -11,3 +11,7 @@ a number of limitations.
 
 A particular caution: Currently, performance of the generated code can
 be very poor in some situations.
+
+- Requires [Racket](https://racket-lang.org/)
+- Install with `raco pkg install rackpropagator`
+- [Documentation](http://ots22.github.io/rackpropagator)
