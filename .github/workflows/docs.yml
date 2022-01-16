@@ -5,6 +5,7 @@ on:
       - master
     paths:
       - 'rackpropagator-doc/**'
+      - '.github/workflows/docs.yml'
 
 jobs:
   build-doc:
@@ -27,7 +28,7 @@ jobs:
       - run: raco scribble --htmls --dest docs --redirect-main https://docs.racket-lang.org +m rackpropagator-doc/rackpropagator/scribblings/rackpropagator.scrbl
 
       - name: Deploy
-        uses: JamesIves/github-pages-deploy-action@4.2.2
+        uses: JamesIves/github-pages-deploy-action@v4.2.2
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: gh-pages
