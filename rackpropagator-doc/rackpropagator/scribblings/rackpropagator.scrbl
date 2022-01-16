@@ -204,7 +204,4 @@ If both the primal and gradient are required at the same arguments, use @racket[
 
 @include-section["limitations.scrbl"]
 
-
-@~cite[pearlmutter2008]
-
 @(generate-bibliography)
