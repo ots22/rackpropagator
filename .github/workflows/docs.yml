@@ -30,7 +30,8 @@ jobs:
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4.2.2
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: gh-pages
-          FOLDER: docs/rackpropagator
-          CLEAN: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
+          folder: docs/rackpropagator
+          message: Deploy to gh-pages
+          clean: true
