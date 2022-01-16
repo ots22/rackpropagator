@@ -23,7 +23,7 @@ jobs:
           variant: 'CS'
           version: '8.3'
 
-      - run: raco pkg install ./rackpropagator-lib ./rackpropagator-doc --auto || true
+      - run: raco pkg install --auto ./rackpropagator-lib ./rackpropagator-doc
 
       - run: raco scribble --htmls --dest docs --redirect-main https://docs.racket-lang.org +m rackpropagator-doc/rackpropagator/scribblings/rackpropagator.scrbl
 
