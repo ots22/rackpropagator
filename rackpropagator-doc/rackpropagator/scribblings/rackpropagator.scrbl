@@ -3,7 +3,7 @@
 @(require "common.rkt")
 
 @title{Rackpropagator: Reverse-mode automatic differentiation of Racket programs}
-@author{Oliver Strickson}
+@author[@author+email["Oliver Strickson" "o.strickson@gmail.com"]]
 @defmodule[rackpropagator]
 
 Rackpropagator provides an automatic differentiation facility for a
