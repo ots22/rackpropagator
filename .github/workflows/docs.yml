@@ -1,0 +1,35 @@
+name: Build scribble docs
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'rackpropagator-doc/**'
+
+jobs:
+  build-doc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2.4.0
+        with:
+          persist-credentials: false
+
+      - name: Build scribble
+        uses: Bogdanp/setup-racket@v1.7
+        with:
+          distribution: 'full'
+          variant: 'regular'
+          version: '8.3'
+
+      - run: raco pkg install ./rackpropagator-lib --auto || true
+
+      - run: raco scribble --htmls --dest docs --redirect-main https://docs.racket-lang.org +m rackpropagator-doc/rackpropagator/scribblings/rackpropagator.scrbl
+
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@4.2.2
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: gh-pages
+          FOLDER: docs/rackpropagator
+          CLEAN: true
