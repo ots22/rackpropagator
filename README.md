@@ -14,4 +14,4 @@ be very poor in some situations.
 
 - Requires [Racket](https://racket-lang.org/)
 - Install with `raco pkg install rackpropagator`
-- [Documentation](https://docs.racket-lang.org/rackpropagator/)
+- [Documentation](http://ots22.github.io/rackpropagator)
